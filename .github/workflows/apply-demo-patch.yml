@@ -17,58 +17,70 @@ jobs:
           fetch-depth: 0
           submodules: false
 
-      - name: Verify and apply Demo Studio V2
+      - name: Replace old Demo Mode with Demo Studio V2
         shell: bash
         run: |
           set -euo pipefail
 
           ARCHIVE="telegram-ios-demo-mode-patch.zip"
           EXPECTED_SHA256="0b818abd4c9af3a90afbdaf325ebcdcf7cc30e437eda96c005936c1885debc32"
-          PATCH_DIR="$RUNNER_TEMP/demo-studio-v2-patches"
+          PATCH_DIR="$RUNNER_TEMP/demo-studio-v2"
+          AUTH_FILE="submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift"
 
           test -f "$ARCHIVE" || {
-            echo "::error::В корне репозитория нет $ARCHIVE"
+            echo "::error::Не найден $ARCHIVE"
             exit 1
           }
 
           ACTUAL_SHA256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
 
-          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
-            echo "::error::Загружен неправильный ZIP"
-            echo "Ожидался: $EXPECTED_SHA256"
-            echo "Получен:   $ACTUAL_SHA256"
+          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256" || {
+            echo "::error::Неправильный ZIP: $ACTUAL_SHA256"
             exit 1
-          fi
+          }
 
           rm -rf "$PATCH_DIR"
           mkdir -p "$PATCH_DIR"
           unzip -q "$ARCHIVE" -d "$PATCH_DIR"
 
-          PATCH_1="$PATCH_DIR/0001-Revert-Add-local-Telegram-demo-mode.patch"
-          PATCH_2="$PATCH_DIR/0002-Add-local-Demo-Studio-over-real-Telegram-account.patch"
+          OLD_REVERT="$PATCH_DIR/0001-Revert-Add-local-Telegram-demo-mode.patch"
+          V2_PATCH="$PATCH_DIR/0002-Add-local-Demo-Studio-over-real-Telegram-account.patch"
 
-          test -f "$PATCH_1" || {
-            echo "::error::В ZIP отсутствует первый патч"
-            exit 1
-          }
-
-          test -f "$PATCH_2" || {
-            echo "::error::В ZIP отсутствует второй патч"
-            exit 1
-          }
-
-          if [ -d "submodules/DemoStudioCore" ] && \
-             [ ! -d "submodules/AuthorizationUI/Sources/DemoMode" ]; then
-            echo "Demo Studio V2 уже применён."
-            exit 0
-          fi
+          test -f "$OLD_REVERT"
+          test -f "$V2_PATCH"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          trap 'git am --abort >/dev/null 2>&1 || true' ERR
+          if [ -d "submodules/DemoStudioCore" ] && \
+             [ ! -d "submodules/AuthorizationUI/Sources/DemoMode" ]; then
+            echo "Demo Studio V2 уже установлен."
+            exit 0
+          fi
 
-          git am "$PATCH_1"
-          git am "$PATCH_2"
+          # Убираем внедрение старой фальшивой авторизации.
+          if grep -Eq \
+            "DemoModeCredentials|demoModeRootController|enterDemoMode" \
+            "$AUTH_FILE"; then
+            git apply \
+              --include="$AUTH_FILE" \
+              "$OLD_REVERT"
+          fi
+
+          # Принудительно удаляем старый Demo Mode любой версии.
+          git rm -r --ignore-unmatch -- \
+            "DEMO_MODE.md" \
+            "submodules/AuthorizationUI/Sources/DemoMode" \
+            "submodules/TelegramUI/Images.xcassets/Demo Wallpaper.imageset"
+
+          git add "$AUTH_FILE"
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Remove legacy Demo Mode"
+          fi
+
+          # Добавляем новый Demo Studio V2.
+          trap 'git am --abort >/dev/null 2>&1 || true' ERR
+          git am "$V2_PATCH"
 
           git push origin "HEAD:${GITHUB_REF_NAME}"
