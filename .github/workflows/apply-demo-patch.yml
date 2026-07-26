@@ -1,4 +1,4 @@
-name: Apply iOS Compatibility Hotfix
+name: Apply Demo Studio V2
 
 on:
   workflow_dispatch:
@@ -15,11 +15,60 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
-      - name: Apply hotfix
+      - name: Verify and apply Demo Studio V2
+        shell: bash
         run: |
+          set -euo pipefail
+
+          ARCHIVE="telegram-ios-demo-mode-patch.zip"
+          EXPECTED_SHA256="0b818abd4c9af3a90afbdaf325ebcdcf7cc30e437eda96c005936c1885debc32"
+          PATCH_DIR="$RUNNER_TEMP/demo-studio-v2-patches"
+
+          test -f "$ARCHIVE" || {
+            echo "::error::В корне репозитория нет $ARCHIVE"
+            exit 1
+          }
+
+          ACTUAL_SHA256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
+
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::Загружен неправильный ZIP"
+            echo "Ожидался: $EXPECTED_SHA256"
+            echo "Получен:   $ACTUAL_SHA256"
+            exit 1
+          fi
+
+          rm -rf "$PATCH_DIR"
+          mkdir -p "$PATCH_DIR"
+          unzip -q "$ARCHIVE" -d "$PATCH_DIR"
+
+          PATCH_1="$PATCH_DIR/0001-Revert-Add-local-Telegram-demo-mode.patch"
+          PATCH_2="$PATCH_DIR/0002-Add-local-Demo-Studio-over-real-Telegram-account.patch"
+
+          test -f "$PATCH_1" || {
+            echo "::error::В ZIP отсутствует первый патч"
+            exit 1
+          }
+
+          test -f "$PATCH_2" || {
+            echo "::error::В ZIP отсутствует второй патч"
+            exit 1
+          }
+
+          if [ -d "submodules/DemoStudioCore" ] && \
+             [ ! -d "submodules/AuthorizationUI/Sources/DemoMode" ]; then
+            echo "Demo Studio V2 уже применён."
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git am telegram-demo-ios13-hotfix.patch
-          git push
+          trap 'git am --abort >/dev/null 2>&1 || true' ERR
+
+          git am --3way "$PATCH_1"
+          git am --3way "$PATCH_2"
+
+          git push origin "HEAD:${GITHUB_REF_NAME}"
