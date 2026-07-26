@@ -44,6 +44,7 @@ import PlainButtonComponent
 import BundleIconComponent
 import MarqueeComponent
 import EdgeEffect
+import ChatListUI
 
 final class PeerInfoHeaderNavigationTransition {
     let sourceNavigationBar: NavigationBar
@@ -106,6 +107,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     
     let avatarClippingNode: SparseNode
     let avatarListNode: PeerInfoAvatarListNode
+    private let demoOwnerAvatarView: UIImageView
     
     let backgroundBannerView: UIView
     let backgroundCover = ComponentView<Empty>()
@@ -225,6 +227,11 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         self.avatarClippingNode.clipsToBounds = true
         
         self.avatarListNode = PeerInfoAvatarListNode(context: context, readyWhenGalleryLoads: avatarInitiallyExpanded, isSettings: isSettings)
+        self.demoOwnerAvatarView = UIImageView()
+        self.demoOwnerAvatarView.contentMode = .scaleAspectFill
+        self.demoOwnerAvatarView.clipsToBounds = true
+        self.demoOwnerAvatarView.isUserInteractionEnabled = false
+        self.demoOwnerAvatarView.translatesAutoresizingMaskIntoConstraints = false
         
         self.titleNodeContainer = ASDisplayNode()
         self.titleNodeRawContainer = ASDisplayNode()
@@ -316,6 +323,13 @@ final class PeerInfoHeaderNode: ASDisplayNode {
 
         self.regularContentNode.addSubnode(self.avatarClippingNode)
         self.avatarClippingNode.addSubnode(self.avatarListNode)
+        self.avatarListNode.avatarContainerNode.view.addSubview(self.demoOwnerAvatarView)
+        NSLayoutConstraint.activate([
+            self.demoOwnerAvatarView.leadingAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.leadingAnchor),
+            self.demoOwnerAvatarView.trailingAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.trailingAnchor),
+            self.demoOwnerAvatarView.topAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.topAnchor),
+            self.demoOwnerAvatarView.bottomAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.bottomAnchor)
+        ])
         
         self.regularContentNode.addSubnode(self.avatarListNode.listContainerNode.controlsClippingOffsetNode)
         self.regularContentNode.addSubnode(self.titleNodeContainer)
@@ -1214,6 +1228,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 title = presentationData.strings.ChatList_AuthorHidden
             } else if let threadData = threadData {
                 title = threadData.info.title
+            } else if self.isSettings, let demoProfile = demoOwnerProfilePresentation(), !demoProfile.displayName.isEmpty {
+                title = demoProfile.displayName
             } else {
                 title = peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
             }
@@ -1236,9 +1252,11 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             smallTitleAttributes = MultiScaleTextState.Attributes(font: Font.medium(28.0), color: .white, shadowColor: titleShadowColor)
             
             if self.isSettings, case let .user(user) = peer {
-                var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? "")
+                let demoProfile = demoOwnerProfilePresentation()
+                let phone = demoProfile.flatMap { $0.phone.isEmpty ? nil : $0.phone } ?? user.phone ?? ""
+                var subtitle = formatPhoneNumber(context: self.context, number: phone)
                 
-                if let mainUsername = user.addressName, !mainUsername.isEmpty {
+                if let mainUsername = demoProfile.flatMap({ $0.username.isEmpty ? nil : $0.username }) ?? user.addressName, !mainUsername.isEmpty {
                     subtitle = "\(subtitle) • @\(mainUsername)"
                 }
                 subtitleStringText = subtitle
@@ -1839,6 +1857,14 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         }
         
         self.avatarListNode.update(size: CGSize(), avatarSize: avatarSize, isExpanded: self.isAvatarExpanded, peer: peer, isForum: isForum, threadId: self.forumTopicThreadId, threadInfo: threadData?.info, theme: presentationData.theme, transition: transition)
+        if self.isSettings, let avatarPath = demoOwnerProfilePresentation()?.avatarPath, let image = UIImage(contentsOfFile: avatarPath) {
+            self.demoOwnerAvatarView.image = image
+            self.demoOwnerAvatarView.isHidden = false
+        } else {
+            self.demoOwnerAvatarView.image = nil
+            self.demoOwnerAvatarView.isHidden = true
+        }
+        self.demoOwnerAvatarView.layer.cornerRadius = avatarSize * 0.5
         self.editingContentNode.avatarNode.update(peer: peer, threadData: threadData, chatLocation: self.chatLocation, item: self.avatarListNode.item, updatingAvatar: state.updatingAvatar, uploadProgress: state.avatarUploadProgress, theme: presentationData.theme, avatarSize: avatarSize, isEditing: state.isEditing)
         self.avatarOverlayNode.update(peer: peer, threadData: threadData, chatLocation: self.chatLocation, item: self.avatarListNode.item, updatingAvatar: state.updatingAvatar, uploadProgress: state.avatarUploadProgress, theme: presentationData.theme, avatarSize: avatarSize, isEditing: state.isEditing)
         if additive {

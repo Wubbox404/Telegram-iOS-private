@@ -72,6 +72,7 @@ private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceh
 
 public final class TelegramRootController: NavigationController, TelegramRootControllerInterface {
     private let context: AccountContext
+    private let demoStudioWatermarkView = DemoStudioWatermarkView()
     
     public var rootTabController: TabBarController?
     
@@ -104,6 +105,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
         super.init(mode: .automaticMasterDetail, theme: NavigationControllerTheme(presentationTheme: self.presentationData.theme))
+
+        activateDemoStudio(accountPeerId: context.account.peerId.toInt64())
         
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).startStrict(next: { [weak self] presentationData in
@@ -139,6 +142,24 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     
     required public init(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    public override func viewDidLoad() {
+        super.viewDidLoad()
+
+        self.view.addSubview(self.demoStudioWatermarkView)
+        NSLayoutConstraint.activate([
+            self.demoStudioWatermarkView.trailingAnchor.constraint(
+                equalTo: self.view.safeAreaLayoutGuide.trailingAnchor,
+                constant: -12.0
+            ),
+            self.demoStudioWatermarkView.bottomAnchor.constraint(
+                equalTo: self.view.safeAreaLayoutGuide.bottomAnchor,
+                constant: -8.0
+            ),
+            self.demoStudioWatermarkView.widthAnchor.constraint(greaterThanOrEqualToConstant: 54.0),
+            self.demoStudioWatermarkView.heightAnchor.constraint(equalToConstant: 22.0)
+        ])
     }
     
     deinit {
@@ -196,6 +217,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         }
     
         super.containerLayoutUpdated(layout, transition: transition)
+        self.view.bringSubviewToFront(self.demoStudioWatermarkView)
     }
     
     public func addRootControllers(showCallsTab: Bool) {
