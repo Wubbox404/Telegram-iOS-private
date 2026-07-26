@@ -45,7 +45,7 @@ jobs:
 
       - name: Configure unsigned build
         run: |
-          printf '\nbuild --//Telegram:disableProvisioningProfiles\n' >> .bazelrc
+          printf '\nbuild --//Telegram:disableProvisioningProfiles\nbuild --//Telegram:disableExtensions\n' >> .bazelrc
 
       - name: Build device IPA
         env:
