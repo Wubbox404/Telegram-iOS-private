@@ -1,0 +1,129 @@
+From fa2b23066e3c8241a75e0cecbd3e8a99d1af43da Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.local>
+Date: Sun, 26 Jul 2026 22:34:56 +0300
+Subject: [PATCH] Fix Demo Mode compatibility with iOS 13
+
+---
+ .../DemoMode/DemoModeChatsController.swift        | 15 +++++++++++----
+ .../Sources/DemoMode/DemoModeRootController.swift | 15 ++++++++-------
+ .../DemoMode/DemoModeSettingsController.swift     |  4 ++--
+ .../Sources/DemoMode/DemoModeUI.swift             |  1 +
+ 4 files changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeChatsController.swift b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeChatsController.swift
+index 9cd9896..395ad91 100644
+--- a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeChatsController.swift
++++ b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeChatsController.swift
+@@ -341,26 +341,29 @@ private final class DemoModeStoriesHeader: UIView {
+             viewed: true,
+             showsAdd: true
+         )
+-        addButton.addAction(UIAction(handler: { [weak self] _ in
++        addButton.onTap = { [weak self] in
+             self?.onAdd?()
+-        }), for: .touchUpInside)
++        }
+         self.stackView.addArrangedSubview(addButton)
+ 
+         for story in stories {
+             let profile = DemoProfile(name: story.authorName, accentHex: story.accentHex)
+             let button = DemoModeStoryButton(title: story.authorName, profile: profile, viewed: story.isViewed)
+-            button.addAction(UIAction(handler: { [weak self] _ in
++            button.onTap = { [weak self] in
+                 self?.onSelect?(story)
+-            }), for: .touchUpInside)
++            }
+             self.stackView.addArrangedSubview(button)
+         }
+     }
+ }
+ 
+ private final class DemoModeStoryButton: UIControl {
++    var onTap: (() -> Void)?
++
+     init(title: String, profile: DemoProfile, viewed: Bool, showsAdd: Bool = false) {
+         super.init(frame: .zero)
+         self.translatesAutoresizingMaskIntoConstraints = false
++        self.addTarget(self, action: #selector(self.pressed), for: .touchUpInside)
+ 
+         let ring = UIView()
+         ring.layer.cornerRadius = 29.0
+@@ -413,6 +416,10 @@ private final class DemoModeStoryButton: UIControl {
+     required init?(coder: NSCoder) {
+         fatalError("init(coder:) has not been implemented")
+     }
++
++    @objc private func pressed() {
++        self.onTap?()
++    }
+ }
+ 
+ final class DemoModeStoryController: UIViewController {
+diff --git a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
+index 5f1012a..b48e43d 100644
+--- a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
++++ b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
+@@ -67,7 +67,9 @@ final class DemoModeRootController: UITabBarController {
+             appearance.configureWithTransparentBackground()
+             appearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterialDark)
+             self.tabBar.standardAppearance = appearance
+-            self.tabBar.scrollEdgeAppearance = appearance
++            if #available(iOS 15.0, *) {
++                self.tabBar.scrollEdgeAppearance = appearance
++            }
+         }
+ 
+         self.view.addSubview(self.watermark)
+@@ -147,12 +149,11 @@ final class DemoModeContactsController: UITableViewController {
+         let identifier = "contact"
+         let cell = tableView.dequeueReusableCell(withIdentifier: identifier) ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
+         let profile = self.snapshot.chats[indexPath.row].profile
+-        var configuration = cell.defaultContentConfiguration()
+-        configuration.text = profile.name
+-        configuration.secondaryText = profile.isContact ? "в контактах" : "был(а) недавно"
+-        configuration.image = DemoModeUI.avatarImage(profile: profile, size: CGSize(width: 48.0, height: 48.0))
+-        configuration.imageProperties.cornerRadius = 24.0
+-        cell.contentConfiguration = configuration
++        cell.textLabel?.text = profile.name
++        cell.detailTextLabel?.text = profile.isContact ? "в контактах" : "был(а) недавно"
++        cell.imageView?.image = DemoModeUI.avatarImage(profile: profile, size: CGSize(width: 48.0, height: 48.0))
++        cell.imageView?.layer.cornerRadius = 24.0
++        cell.imageView?.clipsToBounds = true
+         cell.backgroundColor = .black
+         cell.accessoryType = .disclosureIndicator
+         return cell
+diff --git a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeSettingsController.swift b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeSettingsController.swift
+index 97d786b..a8cf045 100644
+--- a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeSettingsController.swift
++++ b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeSettingsController.swift
+@@ -19,13 +19,13 @@ final class DemoModeSettingsController: UITableViewController {
+             ("Избранное", "bookmark.fill", .systemBlue),
+             ("Недавние звонки", "phone.fill", .systemGreen),
+             ("Устройства", "laptopcomputer.and.iphone", .systemOrange),
+-            ("Папки с чатами", "folder.fill", .systemCyan)
++            ("Папки с чатами", "folder.fill", DemoModeUI.cyan)
+         ],
+         [
+             ("Уведомления и звуки", "bell.badge.fill", .systemRed),
+             ("Конфиденциальность", "lock.fill", .systemGray),
+             ("Данные и память", "externaldrive.fill", .systemGreen),
+-            ("Оформление", "circle.lefthalf.filled", .systemCyan),
++            ("Оформление", "circle.lefthalf.filled", DemoModeUI.cyan),
+             ("Энергосбережение", "battery.50percent", .systemOrange),
+             ("Язык", "globe", .systemPurple)
+         ],
+diff --git a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeUI.swift b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeUI.swift
+index 0351fc9..3b6b817 100644
+--- a/submodules/AuthorizationUI/Sources/DemoMode/DemoModeUI.swift
++++ b/submodules/AuthorizationUI/Sources/DemoMode/DemoModeUI.swift
+@@ -6,6 +6,7 @@ enum DemoModeUI {
+     static let outgoingBlue = UIColor(red: 0.20, green: 0.43, blue: 1.00, alpha: 1.0)
+     static let incomingDark = UIColor(red: 0.12, green: 0.12, blue: 0.15, alpha: 0.96)
+     static let groupedDark = UIColor(red: 0.105, green: 0.105, blue: 0.115, alpha: 1.0)
++    static let cyan = UIColor(red: 0.20, green: 0.78, blue: 0.96, alpha: 1.0)
+ 
+     static func image(assetName: String, fallbackSystemName: String) -> UIImage? {
+         return UIImage(named: assetName) ?? UIImage(systemName: fallbackSystemName)
+-- 
+2.51.1
+
