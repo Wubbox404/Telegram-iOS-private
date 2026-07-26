@@ -43,6 +43,10 @@ jobs:
           test -f submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
           test -f "submodules/TelegramUI/Images.xcassets/Demo Wallpaper.imageset/Contents.json"
 
+      - name: Configure unsigned build
+        run: |
+          printf '\nbuild --//Telegram:disableProvisioningProfiles\n' >> .bazelrc
+
       - name: Build device IPA
         env:
           TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
