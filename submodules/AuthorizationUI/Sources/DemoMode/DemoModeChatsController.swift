@@ -341,26 +341,29 @@ private final class DemoModeStoriesHeader: UIView {
             viewed: true,
             showsAdd: true
         )
-        addButton.addAction(UIAction(handler: { [weak self] _ in
+        addButton.onTap = { [weak self] in
             self?.onAdd?()
-        }), for: .touchUpInside)
+        }
         self.stackView.addArrangedSubview(addButton)
 
         for story in stories {
             let profile = DemoProfile(name: story.authorName, accentHex: story.accentHex)
             let button = DemoModeStoryButton(title: story.authorName, profile: profile, viewed: story.isViewed)
-            button.addAction(UIAction(handler: { [weak self] _ in
+            button.onTap = { [weak self] in
                 self?.onSelect?(story)
-            }), for: .touchUpInside)
+            }
             self.stackView.addArrangedSubview(button)
         }
     }
 }
 
 private final class DemoModeStoryButton: UIControl {
+    var onTap: (() -> Void)?
+
     init(title: String, profile: DemoProfile, viewed: Bool, showsAdd: Bool = false) {
         super.init(frame: .zero)
         self.translatesAutoresizingMaskIntoConstraints = false
+        self.addTarget(self, action: #selector(self.pressed), for: .touchUpInside)
 
         let ring = UIView()
         ring.layer.cornerRadius = 29.0
@@ -412,6 +415,10 @@ private final class DemoModeStoryButton: UIControl {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc private func pressed() {
+        self.onTap?()
     }
 }
 

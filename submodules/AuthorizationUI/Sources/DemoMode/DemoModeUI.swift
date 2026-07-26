@@ -6,6 +6,7 @@ enum DemoModeUI {
     static let outgoingBlue = UIColor(red: 0.20, green: 0.43, blue: 1.00, alpha: 1.0)
     static let incomingDark = UIColor(red: 0.12, green: 0.12, blue: 0.15, alpha: 0.96)
     static let groupedDark = UIColor(red: 0.105, green: 0.105, blue: 0.115, alpha: 1.0)
+    static let cyan = UIColor(red: 0.20, green: 0.78, blue: 0.96, alpha: 1.0)
 
     static func image(assetName: String, fallbackSystemName: String) -> UIImage? {
         return UIImage(named: assetName) ?? UIImage(systemName: fallbackSystemName)

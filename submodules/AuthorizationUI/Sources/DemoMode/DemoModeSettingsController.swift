@@ -19,13 +19,13 @@ final class DemoModeSettingsController: UITableViewController {
             ("Избранное", "bookmark.fill", .systemBlue),
             ("Недавние звонки", "phone.fill", .systemGreen),
             ("Устройства", "laptopcomputer.and.iphone", .systemOrange),
-            ("Папки с чатами", "folder.fill", .systemCyan)
+            ("Папки с чатами", "folder.fill", DemoModeUI.cyan)
         ],
         [
             ("Уведомления и звуки", "bell.badge.fill", .systemRed),
             ("Конфиденциальность", "lock.fill", .systemGray),
             ("Данные и память", "externaldrive.fill", .systemGreen),
-            ("Оформление", "circle.lefthalf.filled", .systemCyan),
+            ("Оформление", "circle.lefthalf.filled", DemoModeUI.cyan),
             ("Энергосбережение", "battery.50percent", .systemOrange),
             ("Язык", "globe", .systemPurple)
         ],

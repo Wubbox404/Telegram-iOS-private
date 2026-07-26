@@ -67,7 +67,9 @@ final class DemoModeRootController: UITabBarController {
             appearance.configureWithTransparentBackground()
             appearance.backgroundEffect = UIBlurEffect(style: .systemChromeMaterialDark)
             self.tabBar.standardAppearance = appearance
-            self.tabBar.scrollEdgeAppearance = appearance
+            if #available(iOS 15.0, *) {
+                self.tabBar.scrollEdgeAppearance = appearance
+            }
         }
 
         self.view.addSubview(self.watermark)
@@ -147,12 +149,11 @@ final class DemoModeContactsController: UITableViewController {
         let identifier = "contact"
         let cell = tableView.dequeueReusableCell(withIdentifier: identifier) ?? UITableViewCell(style: .subtitle, reuseIdentifier: identifier)
         let profile = self.snapshot.chats[indexPath.row].profile
-        var configuration = cell.defaultContentConfiguration()
-        configuration.text = profile.name
-        configuration.secondaryText = profile.isContact ? "в контактах" : "был(а) недавно"
-        configuration.image = DemoModeUI.avatarImage(profile: profile, size: CGSize(width: 48.0, height: 48.0))
-        configuration.imageProperties.cornerRadius = 24.0
-        cell.contentConfiguration = configuration
+        cell.textLabel?.text = profile.name
+        cell.detailTextLabel?.text = profile.isContact ? "в контактах" : "был(а) недавно"
+        cell.imageView?.image = DemoModeUI.avatarImage(profile: profile, size: CGSize(width: 48.0, height: 48.0))
+        cell.imageView?.layer.cornerRadius = 24.0
+        cell.imageView?.clipsToBounds = true
         cell.backgroundColor = .black
         cell.accessoryType = .disclosureIndicator
         return cell
