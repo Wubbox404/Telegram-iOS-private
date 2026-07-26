@@ -1,0 +1,114 @@
+From 466d77a4997765931b8469a33bd989519e6d558a Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.local>
+Date: Sun, 26 Jul 2026 20:26:10 +0300
+Subject: [PATCH 2/2] Add GitHub Actions IPA build
+
+---
+ .github/workflows/build-demo-ipa.yml | 64 ++++++++++++++++++++++++++++
+ DEMO_MODE.md                         | 20 +++++++++
+ 2 files changed, 84 insertions(+)
+ create mode 100644 .github/workflows/build-demo-ipa.yml
+
+diff --git a/.github/workflows/build-demo-ipa.yml b/.github/workflows/build-demo-ipa.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..3025ed255582325d9b7085c6b7053e1113ef2412
+--- /dev/null
++++ b/.github/workflows/build-demo-ipa.yml
+@@ -0,0 +1,64 @@
++name: Build Demo IPA
++
++on:
++  workflow_dispatch:
++
++permissions:
++  contents: read
++
++concurrency:
++  group: telegram-demo-ipa-${{ github.ref }}
++  cancel-in-progress: true
++
++jobs:
++  build:
++    name: iOS 26 device IPA
++    runs-on: macos-26
++    timeout-minutes: 360
++
++    steps:
++      - name: Check out Telegram and submodules
++        uses: actions/checkout@v4
++        with:
++          fetch-depth: 1
++          submodules: recursive
++
++      - name: Select the upstream Xcode version
++        run: |
++          sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
++          xcodebuild -version
++          xcrun --sdk iphoneos --show-sdk-version
++
++      - name: Verify Demo Mode is present
++        run: |
++          test -f submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
++          test -f "submodules/TelegramUI/Images.xcassets/Demo Wallpaper.imageset/Contents.json"
++
++      - name: Build fake-signed device IPA
++        env:
++          TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
++        run: |
++          python3 -u build-system/Make/Make.py \
++            --cacheDir="$TELEGRAM_BAZEL_CACHE" \
++            build \
++            --configurationPath=build-system/appstore-configuration.json \
++            --codesigningInformationPath=build-system/fake-codesigning \
++            --buildNumber="${GITHUB_RUN_NUMBER}" \
++            --configuration=release_arm64
++
++      - name: Prepare artifact
++        run: |
++          test -f build/artifacts/Telegram.ipa
++          cp build/artifacts/Telegram.ipa build/artifacts/TelegramDemo.ipa
++          shasum -a 256 build/artifacts/TelegramDemo.ipa \
++            > build/artifacts/TelegramDemo.ipa.sha256
++
++      - name: Upload IPA
++        uses: actions/upload-artifact@v4
++        with:
++          name: TelegramDemo-IPA
++          path: |
++            build/artifacts/TelegramDemo.ipa
++            build/artifacts/TelegramDemo.ipa.sha256
++          if-no-files-found: error
++          retention-days: 7
+diff --git a/DEMO_MODE.md b/DEMO_MODE.md
+index a18f3664fd9ee5eb7014f4f20f7d10b0d4ddd66c..f1922c3d6243c972a347d548fbed1e42657ce6ca 100644
+--- a/DEMO_MODE.md
++++ b/DEMO_MODE.md
+@@ -41,5 +41,25 @@ with its source-distribution requirements if you distribute a binary.
+ Sideloadly signs and installs an existing IPA. It does not compile this source.
+ Build the device archive on a supported Mac or macOS CI runner first.
+ 
++## Build with GitHub Actions
++
++The repository includes `.github/workflows/build-demo-ipa.yml`. It uses the
++official `macos-26` GitHub-hosted runner, selects Xcode 26.2, builds the
++`release_arm64` device target with Telegram's checked-in fake signing data, and
++uploads `TelegramDemo.ipa` as the `TelegramDemo-IPA` workflow artifact.
++
++1. Push the patched source to a GitHub fork.
++2. Open **Actions → Build Demo IPA → Run workflow**.
++3. Download the `TelegramDemo-IPA` artifact when the job finishes.
++4. Unzip it and install `TelegramDemo.ipa` with Sideloadly. Sideloadly replaces
++   the fake signature with a signature for your Apple ID during installation.
++
++This workflow intentionally runs only by manual dispatch because a clean
++Telegram iOS build is large. GitHub's checked-in `appstore-configuration.json`
++is used only to satisfy the upstream build system. Demo Mode itself stays
++offline. If you distribute a build or enable real-account login for other
++people, replace the API and branding configuration with your own values as
++required by the upstream README.
++
+ The demo number is intercepted before `auth.sendCode`, and the demo code is
+ validated locally before any request reaches Telegram.
+-- 
+2.51.1
+
