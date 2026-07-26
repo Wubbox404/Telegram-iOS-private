@@ -68,7 +68,7 @@ jobs:
 
           trap 'git am --abort >/dev/null 2>&1 || true' ERR
 
-          git am --3way "$PATCH_1"
-          git am --3way "$PATCH_2"
+          git am "$PATCH_1"
+          git am "$PATCH_2"
 
           git push origin "HEAD:${GITHUB_REF_NAME}"
