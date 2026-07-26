@@ -48,7 +48,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
     private var stateDisposable: Disposable?
     private let actionDisposable = MetaDisposable()
     private var applicationStateDisposable: Disposable?
-    private var demoModeRootController: DemoModeRootController?
     
     private var didPlayPresentationAnimation = false
     
@@ -199,28 +198,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
                 guard let self else {
                     return
                 }
-
-                if DemoModeCredentials.matchesPhoneNumber(number) {
-                    controller?.inProgress = false
-                    let codeController = self.codeEntryController(
-                        number: DemoModeCredentials.displayedPhoneNumber,
-                        phoneCodeHash: "local-demo-mode",
-                        email: nil,
-                        type: .sms(length: 6),
-                        nextType: nil,
-                        timeout: nil,
-                        previousCodeType: nil,
-                        isPrevious: false,
-                        termsOfService: nil
-                    )
-                    var controllers = self.viewControllers.filter {
-                        !($0 is AuthorizationSequenceCodeEntryController)
-                    }
-                    controllers.append(codeController)
-                    self.setViewControllers(controllers, animated: true)
-                    return
-                }
-
                 controller?.inProgress = true
                 
                 let disableAuthTokens = self.sharedContext.immediateExperimentalUISettings.disableReloginTokens
@@ -486,21 +463,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
             }
             controller.loginWithCode = { [weak self, weak controller] code in
                 if let strongSelf = self {
-                    if DemoModeCredentials.matchesPhoneNumber(number) {
-                        if DemoModeCredentials.matchesCode(code) {
-                            controller?.inProgress = true
-                            controller?.animateSuccess()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                                controller?.inProgress = false
-                                strongSelf.enterDemoMode()
-                            }
-                        } else {
-                            controller?.inProgress = false
-                            controller?.animateError(text: strongSelf.presentationData.strings.Login_WrongCodeError)
-                        }
-                        return
-                    }
-
                     controller?.inProgress = true
                     
                     let authorizationCode: AuthorizationCode
@@ -1278,68 +1240,6 @@ public final class AuthorizationSequenceController: NavigationController, ASAuth
         }
         controller.updateData(firstName: firstName, lastName: lastName, termsOfService: termsOfService)
         return controller
-    }
-
-    private func enterDemoMode() {
-        guard self.demoModeRootController == nil else {
-            return
-        }
-
-        self.view.endEditing(true)
-        let controller = DemoModeRootController(store: .shared, exit: { [weak self] in
-            self?.leaveDemoMode()
-        })
-        self.demoModeRootController = controller
-        self.addChild(controller)
-        controller.view.translatesAutoresizingMaskIntoConstraints = false
-        controller.view.alpha = 0.0
-        controller.view.transform = CGAffineTransform(scaleX: 1.025, y: 1.025)
-        self.view.addSubview(controller.view)
-        NSLayoutConstraint.activate([
-            controller.view.leadingAnchor.constraint(equalTo: self.view.leadingAnchor),
-            controller.view.trailingAnchor.constraint(equalTo: self.view.trailingAnchor),
-            controller.view.topAnchor.constraint(equalTo: self.view.topAnchor),
-            controller.view.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
-        ])
-        controller.didMove(toParent: self)
-
-        UIView.animate(
-            withDuration: 0.46,
-            delay: 0.0,
-            usingSpringWithDamping: 0.88,
-            initialSpringVelocity: 0.2,
-            options: [.curveEaseOut, .allowUserInteraction]
-        ) {
-            controller.view.alpha = 1.0
-            controller.view.transform = .identity
-        }
-    }
-
-    private func leaveDemoMode() {
-        guard let controller = self.demoModeRootController else {
-            return
-        }
-        self.demoModeRootController = nil
-        controller.willMove(toParent: nil)
-        UIView.animate(withDuration: 0.28, animations: {
-            controller.view.alpha = 0.0
-            controller.view.transform = CGAffineTransform(scaleX: 1.02, y: 1.02)
-        }, completion: { [weak controller] _ in
-            controller?.view.removeFromSuperview()
-            controller?.removeFromParent()
-        })
-
-        let account = self.account
-        let _ = self.engine.auth.setState(
-            state: UnauthorizedAccountState(
-                isTestingEnvironment: account.testingEnvironment,
-                masterDatacenterId: account.masterDatacenterId,
-                contents: .phoneEntry(
-                    countryCode: AuthorizationSequenceCountrySelectionController.defaultCountryCode(),
-                    number: ""
-                )
-            )
-        ).startStandalone()
     }
     
     private func updateState(state: InnerState) {
