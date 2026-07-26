@@ -83,4 +83,8 @@ jobs:
           trap 'git am --abort >/dev/null 2>&1 || true' ERR
           git am "$V2_PATCH"
 
+          # GitHub Actions не разрешает токену создавать другой workflow.
+          git rm --ignore-unmatch ".github/workflows/build-demo-studio-v2.yml"
+          git commit --amend --no-edit
+
           git push origin "HEAD:${GITHUB_REF_NAME}"
