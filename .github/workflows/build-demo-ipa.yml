@@ -1,4 +1,4 @@
-name: Build Demo IPA
+name: Build Demo Studio V2
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: telegram-demo-ipa-${{ github.ref }}
+  group: telegram-demo-studio-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,61 +18,64 @@ jobs:
 
     steps:
       - name: Check out Telegram
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
           submodules: false
 
       - name: Download official Telegram submodules
         run: |
-          git config --global \
-            url."https://github.com/TelegramMessenger/".insteadOf \
-            "https://github.com/${GITHUB_REPOSITORY_OWNER}/"
-
+          git config -f .gitmodules submodule.submodules/rlottie/rlottie.url \
+            https://github.com/TelegramMessenger/rlottie.git
+          git config -f .gitmodules submodule.submodules/TgVoipWebrtc/tgcalls.url \
+            https://github.com/TelegramMessenger/tgcalls.git
           git submodule sync --recursive
-          git submodule update --init --recursive --jobs 8
+          git -c protocol.version=2 submodule update \
+            --init --recursive --depth 1 --jobs 8
 
       - name: Select Xcode 26.2
         run: |
+          test -d /Applications/Xcode_26.2.app
           sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Verify Demo Mode
+      - name: Keep the compatible deployment target
         run: |
-          test -f submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
-          test -f "submodules/TelegramUI/Images.xcassets/Demo Wallpaper.imageset/Contents.json"
+          python3 - <<'PY'
+          import pathlib
+          import re
 
-      - name: Install Telegram build certificate
+          path = pathlib.Path("Telegram/BUILD")
+          source = path.read_text()
+          source, replacements = re.subn(
+              r'(?m)^minimum_os_version = "[^"]+"$',
+              'minimum_os_version = "13.0"',
+              source,
+          )
+          if replacements != 1:
+              raise SystemExit(
+                  f"Expected exactly one minimum_os_version assignment, got {replacements}"
+              )
+          path.write_text(source)
+          PY
+          grep -F 'minimum_os_version = "13.0"' Telegram/BUILD
+
+      - name: Import the repository signing identity
         run: |
-          KEYCHAIN_PATH="${RUNNER_TEMP}/telegram-build.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          python3 build-system/Make/ImportCertificates.py \
+            --path build-system/fake-codesigning/certs
+          security find-identity -v -p codesigning temp.keychain
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          security import \
-            build-system/fake-codesigning/certs/SelfSigned.p12 \
-            -k "$KEYCHAIN_PATH" \
-            -P "" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security
-
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-      - name: Disable app extensions
+      - name: Verify Demo Studio V2
         run: |
-          printf '\nbuild --//Telegram:disableExtensions\n' >> .bazelrc
+          test -f submodules/DemoStudioCore/Sources/DemoStudioStore.swift
+          test -f submodules/ChatListUI/Sources/DemoStudio/DemoStudioController.swift
+          test -f submodules/ChatListUI/Sources/DemoStudio/DemoStudioWatermarkView.swift
+          test ! -d submodules/AuthorizationUI/Sources/DemoMode
+          ! grep -R "DemoModeCredentials" submodules/AuthorizationUI/Sources
 
-      - name: Build device IPA
+      - name: Build fake-signed device IPA
         env:
           TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
         run: |
@@ -84,19 +87,30 @@ jobs:
             --buildNumber="${GITHUB_RUN_NUMBER}" \
             --configuration=release_arm64
 
-      - name: Prepare IPA
+      - name: Prepare artifact
         run: |
-          test -f build/artifacts/Telegram.ipa
-          cp build/artifacts/Telegram.ipa build/artifacts/TelegramDemo.ipa
-          shasum -a 256 build/artifacts/TelegramDemo.ipa \
-            > build/artifacts/TelegramDemo.ipa.sha256
+          mkdir -p build/artifacts
+          for IPA_PATH in bazel-out/*/bin/Telegram/Telegram.ipa; do
+            if [ -f "$IPA_PATH" ]; then
+              cp "$IPA_PATH" build/artifacts/TelegramDemoStudioV2.ipa
+              break
+            fi
+          done
+          test -f build/artifacts/TelegramDemoStudioV2.ipa
+          shasum -a 256 build/artifacts/TelegramDemoStudioV2.ipa \
+            > build/artifacts/TelegramDemoStudioV2.ipa.sha256
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: TelegramDemo-IPA
+          name: TelegramDemoStudioV2-IPA
           path: |
-            build/artifacts/TelegramDemo.ipa
-            build/artifacts/TelegramDemo.ipa.sha256
+            build/artifacts/TelegramDemoStudioV2.ipa
+            build/artifacts/TelegramDemoStudioV2.ipa.sha256
           if-no-files-found: error
           retention-days: 7
+
+      - name: Remove temporary keychain
+        if: always()
+        run: |
+          security delete-keychain temp.keychain || true
