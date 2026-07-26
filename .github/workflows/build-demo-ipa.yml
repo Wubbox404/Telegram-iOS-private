@@ -17,11 +17,20 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Check out Telegram and submodules
+      - name: Check out Telegram
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-          submodules: recursive
+          submodules: false
+
+      - name: Download official Telegram submodules
+        run: |
+          git config --global \
+            url."https://github.com/TelegramMessenger/".insteadOf \
+            "https://github.com/${GITHUB_REPOSITORY_OWNER}/"
+
+          git submodule sync --recursive
+          git submodule update --init --recursive --jobs 8
 
       - name: Select Xcode 26.2
         run: |
