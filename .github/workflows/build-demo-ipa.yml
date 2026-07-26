@@ -1,0 +1,64 @@
+name: Build Demo IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-demo-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: iOS 26 device IPA
+    runs-on: macos-26
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out Telegram and submodules
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Select Xcode 26.2
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.2.app/Contents/Developer
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Verify Demo Mode
+        run: |
+          test -f submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift
+          test -f "submodules/TelegramUI/Images.xcassets/Demo Wallpaper.imageset/Contents.json"
+
+      - name: Build device IPA
+        env:
+          TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
+        run: |
+          python3 -u build-system/Make/Make.py \
+            --cacheDir="$TELEGRAM_BAZEL_CACHE" \
+            build \
+            --configurationPath=build-system/appstore-configuration.json \
+            --codesigningInformationPath=build-system/fake-codesigning \
+            --buildNumber="${GITHUB_RUN_NUMBER}" \
+            --configuration=release_arm64
+
+      - name: Prepare IPA
+        run: |
+          test -f build/artifacts/Telegram.ipa
+          cp build/artifacts/Telegram.ipa build/artifacts/TelegramDemo.ipa
+          shasum -a 256 build/artifacts/TelegramDemo.ipa \
+            > build/artifacts/TelegramDemo.ipa.sha256
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelegramDemo-IPA
+          path: |
+            build/artifacts/TelegramDemo.ipa
+            build/artifacts/TelegramDemo.ipa.sha256
+          if-no-files-found: error
+          retention-days: 7
