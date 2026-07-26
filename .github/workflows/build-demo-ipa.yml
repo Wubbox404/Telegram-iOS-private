@@ -72,14 +72,6 @@ jobs:
         run: |
           printf '\nbuild --//Telegram:disableExtensions\n' >> .bazelrc
 
-      - name: Set iOS 26 deployment target
-        run: |
-          sed -i '' \
-            's/minimum_os_version = "13.0"/minimum_os_version = "26.0"/' \
-            Telegram/BUILD
-
-          grep -n 'minimum_os_version = ' Telegram/BUILD | head -1
-
       - name: Build device IPA
         env:
           TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
