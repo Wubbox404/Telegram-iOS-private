@@ -32,5 +32,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git am "$PATCH_DIR"/0001-*.patch "$PATCH_DIR"/0002-*.patch
+          git am "$PATCH_DIR"/0001-*.patch
           git push origin "HEAD:${GITHUB_REF_NAME}"
