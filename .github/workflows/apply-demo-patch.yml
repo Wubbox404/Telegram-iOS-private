@@ -1,4 +1,4 @@
-name: Apply Demo Patch
+name: Apply iOS Compatibility Hotfix
 
 on:
   workflow_dispatch:
@@ -16,21 +16,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply Demo Mode patches
+      - name: Apply hotfix
         run: |
-          set -euo pipefail
-
-          if test -f submodules/AuthorizationUI/Sources/DemoMode/DemoModeRootController.swift; then
-            echo "Demo Mode is already installed."
-            exit 0
-          fi
-
-          PATCH_DIR="$RUNNER_TEMP/telegram-demo-patches"
-          mkdir -p "$PATCH_DIR"
-          unzip telegram-ios-demo-mode-patch.zip -d "$PATCH_DIR"
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git am "$PATCH_DIR"/0001-*.patch
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git am telegram-demo-ios13-hotfix.patch
+          git push
