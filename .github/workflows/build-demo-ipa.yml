@@ -146,35 +146,6 @@ jobs:
           grep -F 'if #available(iOS 10, *), buildConfig.isSiriEnabled {' \
             submodules/TelegramUI/Sources/AppDelegate.swift
 
-      - name: Preflight changed Swift targets
-        run: |
-          set +e
-          STATUS=0
-
-          for TARGET in \
-            "//submodules/ChatListUI:ChatListUI" \
-            "//submodules/TelegramUI/Components/Gifts/GiftViewScreen:GiftViewScreen" \
-            "//submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen:PeerInfoScreen"
-          do
-            echo "::group::Preflight $TARGET"
-            python3 -u build-system/Make/Make.py \
-              --cacheDir="$RUNNER_TEMP/telegram-bazel-cache" \
-              build \
-              --configurationPath=build-system/sideload-configuration.json \
-              --codesigningInformationPath=build-system/fake-codesigning \
-              --buildNumber="${GITHUB_RUN_NUMBER}" \
-              --configuration=release_arm64 \
-              --target="$TARGET"
-            RESULT=$?
-            echo "::endgroup::"
-
-            if [ "$RESULT" -ne 0 ]; then
-              STATUS="$RESULT"
-            fi
-          done
-
-          exit "$STATUS"
-
       - name: Build fake-signed device IPA
         run: |
           python3 -u build-system/Make/Make.py \
