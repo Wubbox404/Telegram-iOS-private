@@ -70,9 +70,9 @@ final class DemoChatsController: DemoStudioTableController {
         let stateSuffix = "\(chat.isPinned ? " 📌" : "")\(chat.isMuted ? " 🔕" : "")"
         cell.textLabel?.text = "\(profile.displayName)\(profile.isPremium ? " \(profile.premiumEmoji)" : "")\(stateSuffix)"
         cell.textLabel?.font = UIFont.systemFont(ofSize: 17.0, weight: .semibold)
-        cell.textLabel?.textColor = self.presentationData.theme.chatList.itemPrimaryTextColor
+        cell.textLabel?.textColor = self.presentationData.theme.list.itemPrimaryTextColor
         cell.detailTextLabel?.text = self.subtitle(chat: chat)
-        cell.detailTextLabel?.textColor = self.presentationData.theme.chatList.itemSecondaryTextColor
+        cell.detailTextLabel?.textColor = self.presentationData.theme.list.itemSecondaryTextColor
         cell.imageView?.image = DemoStudioColors.image(
             symbol: "person.fill",
             background: DemoStudioColors.avatarColor(seed: profile.displayName)

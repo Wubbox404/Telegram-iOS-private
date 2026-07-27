@@ -215,7 +215,7 @@ final class DemoOwnerProfileController: DemoStudioTableController, UIImagePicker
 
     @objc private func save() {
         self.saveValue()
-        (self.navigationController as? NavigationController)?.popViewController(animated: true)
+        let _ = (self.navigationController as? NavigationController)?.popViewController(animated: true)
     }
 
     private func saveValue() {

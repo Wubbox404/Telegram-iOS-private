@@ -306,7 +306,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
         let trimmedName = self.profile.firstName.trimmingCharacters(in: .whitespacesAndNewlines)
         self.profile.firstName = trimmedName.isEmpty ? "Без имени" : trimmedName
         self.store.upsertProfile(self.profile)
-        (self.navigationController as? NavigationController)?.popViewController(animated: true)
+        let _ = (self.navigationController as? NavigationController)?.popViewController(animated: true)
     }
 
     func imagePickerController(
