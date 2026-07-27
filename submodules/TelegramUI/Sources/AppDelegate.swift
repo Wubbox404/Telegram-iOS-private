@@ -290,7 +290,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let appGroupName = "group.\(baseAppBundleId)"
 
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
-        configuration.sharedContainerIdentifier = appGroupName
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName) != nil {
+            configuration.sharedContainerIdentifier = appGroupName
+        }
         configuration.isDiscretionary = false
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         self.urlSessions.append(session)
@@ -641,9 +643,36 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             isICloudEnabled: buildConfig.isICloudEnabled
         )
         
-        guard let appGroupUrl = maybeAppGroupUrl else {
-            self.mainWindow?.presentNative(UIAlertController(title: nil, message: "Error 2", preferredStyle: .alert))
-            return true
+        let appGroupUrl: URL
+        if let maybeAppGroupUrl {
+            appGroupUrl = maybeAppGroupUrl
+        } else {
+            let fallbackRoot = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first ?? FileManager.default.urls(
+                for: .documentDirectory,
+                in: .userDomainMask
+            )[0]
+            appGroupUrl = fallbackRoot.appendingPathComponent(
+                "TelegramSideloadContainer",
+                isDirectory: true
+            )
+            do {
+                try FileManager.default.createDirectory(
+                    at: appGroupUrl,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
+            } catch {
+                self.window?.makeKeyAndVisible()
+                self.mainWindow?.presentNative(UIAlertController(
+                    title: "Demo Studio",
+                    message: "Не удалось создать локальное хранилище: \(error.localizedDescription)",
+                    preferredStyle: .alert
+                ))
+                return true
+            }
         }
         
         var isDebugConfiguration = false
