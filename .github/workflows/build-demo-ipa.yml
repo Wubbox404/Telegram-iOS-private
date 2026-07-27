@@ -15,6 +15,8 @@ jobs:
     name: iOS 26 device IPA
     runs-on: macos-26
     timeout-minutes: 360
+    env:
+      TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
 
     steps:
       - name: Check out Telegram
@@ -40,7 +42,7 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Keep the compatible deployment target
+      - name: Harden the sideload application target
         run: |
           python3 - <<'PY'
           import pathlib
@@ -48,18 +50,79 @@ jobs:
 
           path = pathlib.Path("Telegram/BUILD")
           source = path.read_text()
-          source, replacements = re.subn(
+          source, minimum_os_replacements = re.subn(
               r'(?m)^minimum_os_version = "[^"]+"$',
               'minimum_os_version = "13.0"',
               source,
           )
-          if replacements != 1:
+          if minimum_os_replacements != 1:
               raise SystemExit(
-                  f"Expected exactly one minimum_os_version assignment, got {replacements}"
+                  "Expected exactly one minimum_os_version assignment, "
+                  f"got {minimum_os_replacements}"
               )
+
+          source, extension_replacements = re.subn(
+              r'''(?ms)(
+                  bool_flag\(
+                  \s+name\ =\ "disableExtensions",
+                  \s+build_setting_default\ =\s*
+              )(?:False|True)(
+                  ,
+                  \s+visibility\ =\ \["//visibility:public"\],
+                  \s+\)
+              )''',
+              r"\g<1>True\g<2>",
+              source,
+              flags=re.VERBOSE,
+          )
+          if extension_replacements != 1:
+              raise SystemExit(
+                  "Expected exactly one disableExtensions default, "
+                  f"got {extension_replacements}"
+              )
+
           path.write_text(source)
           PY
           grep -F 'minimum_os_version = "13.0"' Telegram/BUILD
+          grep -A3 -F 'name = "disableExtensions"' Telegram/BUILD |
+            grep -F 'build_setting_default = True'
+
+      - name: Create a sideload-safe runtime configuration
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          source_path = Path("build-system/appstore-configuration.json")
+          output_path = Path("build-system/sideload-configuration.json")
+
+          configuration = json.loads(source_path.read_text())
+          configuration["enable_icloud"] = False
+          configuration["enable_siri"] = False
+          output_path.write_text(
+              json.dumps(configuration, indent=2, sort_keys=True) + "\n"
+          )
+
+          verified = json.loads(output_path.read_text())
+          if verified["enable_icloud"] is not False:
+              raise SystemExit("Sideload builds must not initialize CloudKit")
+          if verified["enable_siri"] is not False:
+              raise SystemExit("Sideload builds must not initialize Siri")
+          PY
+          grep -F '"enable_icloud": false' \
+            build-system/sideload-configuration.json
+          grep -F '"enable_siri": false' \
+            build-system/sideload-configuration.json
+
+      - name: Restore persistent Bazel cache
+        id: bazel-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/telegram-bazel-cache
+          key: telegram-demo-bazel-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            telegram-demo-bazel-${{ runner.os }}-${{ github.sha }}-
+            telegram-demo-bazel-${{ runner.os }}-
 
       - name: Import the repository signing identity
         run: |
@@ -74,22 +137,67 @@ jobs:
           test -f submodules/ChatListUI/Sources/DemoStudio/DemoStudioWatermarkView.swift
           test ! -d submodules/AuthorizationUI/Sources/DemoMode
           ! grep -R "DemoModeCredentials" submodules/AuthorizationUI/Sources
+          grep -F 'TelegramSideloadContainer' \
+            submodules/TelegramUI/Sources/AppDelegate.swift
+          grep -F 'private var supportsSystemPushRegistration = false' \
+            submodules/TelegramUI/Sources/AppDelegate.swift
+          grep -F 'if self.supportsSystemPushRegistration {' \
+            submodules/TelegramUI/Sources/AppDelegate.swift
+          grep -F 'private func registerForRemoteNotificationsIfAvailable()' \
+            submodules/TelegramUI/Sources/AppDelegate.swift
+          grep -F 'if #available(iOS 10, *), buildConfig.isSiriEnabled {' \
+            submodules/TelegramUI/Sources/AppDelegate.swift
+
+      - name: Preflight changed Swift targets
+        run: |
+          set +e
+          STATUS=0
+
+          for TARGET in \
+            "//submodules/ChatListUI:ChatListUI" \
+            "//submodules/TelegramUI/Components/Gifts/GiftViewScreen:GiftViewScreen" \
+            "//submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen:PeerInfoScreen"
+          do
+            echo "::group::Preflight $TARGET"
+            python3 -u build-system/Make/Make.py \
+              --cacheDir="$TELEGRAM_BAZEL_CACHE" \
+              build \
+              --configurationPath=build-system/sideload-configuration.json \
+              --codesigningInformationPath=build-system/fake-codesigning \
+              --buildNumber="${GITHUB_RUN_NUMBER}" \
+              --configuration=release_arm64 \
+              --target="$TARGET"
+            RESULT=$?
+            echo "::endgroup::"
+
+            if [ "$RESULT" -ne 0 ]; then
+              STATUS="$RESULT"
+            fi
+          done
+
+          exit "$STATUS"
 
       - name: Build fake-signed device IPA
-        env:
-          TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
         run: |
           python3 -u build-system/Make/Make.py \
             --cacheDir="$TELEGRAM_BAZEL_CACHE" \
             build \
-            --configurationPath=build-system/appstore-configuration.json \
+            --configurationPath=build-system/sideload-configuration.json \
             --codesigningInformationPath=build-system/fake-codesigning \
             --buildNumber="${GITHUB_RUN_NUMBER}" \
             --configuration=release_arm64
 
+      - name: Save persistent Bazel cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/telegram-bazel-cache
+          key: ${{ steps.bazel-cache.outputs.cache-primary-key }}
+
       - name: Prepare artifact
         run: |
           mkdir -p build/artifacts
+          IPA_PATH=""
           for IPA_PATH in bazel-out/*/bin/Telegram/Telegram.ipa; do
             if [ -f "$IPA_PATH" ]; then
               cp "$IPA_PATH" build/artifacts/TelegramDemoStudioV2.ipa
@@ -97,6 +205,55 @@ jobs:
             fi
           done
           test -f build/artifacts/TelegramDemoStudioV2.ipa
+
+          CHECK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$CHECK_DIR"' EXIT
+          unzip -q build/artifacts/TelegramDemoStudioV2.ipa \
+            -d "$CHECK_DIR"
+
+          APP_PATH="$(
+            find "$CHECK_DIR/Payload" \
+              -mindepth 1 -maxdepth 1 \
+              -type d -name '*.app' \
+              -print -quit
+          )"
+          test -n "$APP_PATH"
+          test ! -d "$APP_PATH/PlugIns"
+
+          EXECUTABLE="$(
+            /usr/libexec/PlistBuddy \
+              -c 'Print :CFBundleExecutable' \
+              "$APP_PATH/Info.plist"
+          )"
+          file "$APP_PATH/$EXECUTABLE" | grep -F 'arm64'
+
+          MINIMUM_OS="$(
+            /usr/libexec/PlistBuddy \
+              -c 'Print :MinimumOSVersion' \
+              "$APP_PATH/Info.plist"
+          )"
+          test "$MINIMUM_OS" = "13.0"
+
+          codesign --verify --strict "$APP_PATH"
+          codesign -d --entitlements :- "$APP_PATH" \
+            > build/artifacts/TelegramDemoStudioV2.entitlements.plist
+          plutil -convert xml1 \
+            build/artifacts/TelegramDemoStudioV2.entitlements.plist
+          ! grep -F 'com.apple.developer.icloud-' \
+            build/artifacts/TelegramDemoStudioV2.entitlements.plist
+          ! grep -F 'com.apple.developer.ubiquity' \
+            build/artifacts/TelegramDemoStudioV2.entitlements.plist
+          ! grep -F 'com.apple.developer.siri' \
+            build/artifacts/TelegramDemoStudioV2.entitlements.plist
+
+          {
+            echo "architecture=arm64"
+            echo "minimum_os=$MINIMUM_OS"
+            echo "extensions=disabled"
+            echo "icloud=disabled"
+            echo "siri=disabled"
+          } > build/artifacts/TelegramDemoStudioV2.audit.txt
+
           shasum -a 256 build/artifacts/TelegramDemoStudioV2.ipa \
             > build/artifacts/TelegramDemoStudioV2.ipa.sha256
 
@@ -107,6 +264,8 @@ jobs:
           path: |
             build/artifacts/TelegramDemoStudioV2.ipa
             build/artifacts/TelegramDemoStudioV2.ipa.sha256
+            build/artifacts/TelegramDemoStudioV2.audit.txt
+            build/artifacts/TelegramDemoStudioV2.entitlements.plist
           if-no-files-found: error
           retention-days: 7
 
