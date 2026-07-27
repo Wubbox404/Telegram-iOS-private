@@ -15,8 +15,6 @@ jobs:
     name: iOS 26 device IPA
     runs-on: macos-26
     timeout-minutes: 360
-    env:
-      TELEGRAM_BAZEL_CACHE: ${{ runner.temp }}/telegram-bazel-cache
 
     steps:
       - name: Check out Telegram
@@ -160,7 +158,7 @@ jobs:
           do
             echo "::group::Preflight $TARGET"
             python3 -u build-system/Make/Make.py \
-              --cacheDir="$TELEGRAM_BAZEL_CACHE" \
+              --cacheDir="$RUNNER_TEMP/telegram-bazel-cache" \
               build \
               --configurationPath=build-system/sideload-configuration.json \
               --codesigningInformationPath=build-system/fake-codesigning \
@@ -180,7 +178,7 @@ jobs:
       - name: Build fake-signed device IPA
         run: |
           python3 -u build-system/Make/Make.py \
-            --cacheDir="$TELEGRAM_BAZEL_CACHE" \
+            --cacheDir="$RUNNER_TEMP/telegram-bazel-cache" \
             build \
             --configurationPath=build-system/sideload-configuration.json \
             --codesigningInformationPath=build-system/fake-codesigning \
