@@ -1,4 +1,4 @@
-name: Apply Demo Studio V2 Compile Hotfix
+name: Apply Demo Studio Sideload Launch Hotfix
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Apply verified compile fixes
+      - name: Add a local-container fallback for sideloaded builds
         shell: bash
         run: |
           set -euo pipefail
@@ -25,112 +25,81 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          ui_path = Path(
-              "submodules/ChatListUI/Sources/DemoStudio/DemoStudioUI.swift"
-          )
-          ui = ui_path.read_text()
+          path = Path("submodules/TelegramUI/Sources/AppDelegate.swift")
+          source = path.read_text()
 
-          old_push = """    func push(_ controller: ViewController) {
-                  (self.navigationController as? NavigationController)?.pushViewController(controller)
-              }
+          old_session = """        let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
+                  configuration.sharedContainerIdentifier = appGroupName
+                  configuration.isDiscretionary = false
           """
-          delegate_defaults = """    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-              }
-
-              func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-                  return nil
-              }
-
-              func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-                  return nil
-              }
-
-              func tableView(
-                  _ tableView: UITableView,
-                  leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath
-              ) -> UISwipeActionsConfiguration? {
-                  return nil
-              }
-
-              func tableView(
-                  _ tableView: UITableView,
-                  trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
-              ) -> UISwipeActionsConfiguration? {
-                  return nil
-              }
+          new_session = """        let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
+                  if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName) != nil {
+                      configuration.sharedContainerIdentifier = appGroupName
+                  }
+                  configuration.isDiscretionary = false
           """
 
-          if old_push in ui:
-              ui = ui.replace(old_push, delegate_defaults, 1)
-          elif delegate_defaults not in ui:
-              raise SystemExit("DemoStudioUI.swift has an unexpected layout")
+          if old_session in source:
+              source = source.replace(old_session, new_session, 1)
+          elif new_session not in source:
+              raise SystemExit("Unexpected background URLSession layout")
 
-          ui_path.write_text(ui)
+          old_container = """        guard let appGroupUrl = maybeAppGroupUrl else {
+                      self.mainWindow?.presentNative(UIAlertController(title: nil, message: "Error 2", preferredStyle: .alert))
+                      return true
+                  }
+          """
+          new_container = """        let appGroupUrl: URL
+                  if let maybeAppGroupUrl {
+                      appGroupUrl = maybeAppGroupUrl
+                  } else {
+                      let fallbackRoot = FileManager.default.urls(
+                          for: .applicationSupportDirectory,
+                          in: .userDomainMask
+                      ).first ?? FileManager.default.urls(
+                          for: .documentDirectory,
+                          in: .userDomainMask
+                      )[0]
+                      appGroupUrl = fallbackRoot.appendingPathComponent(
+                          "TelegramSideloadContainer",
+                          isDirectory: true
+                      )
+                      do {
+                          try FileManager.default.createDirectory(
+                              at: appGroupUrl,
+                              withIntermediateDirectories: true,
+                              attributes: nil
+                          )
+                      } catch {
+                          self.window?.makeKeyAndVisible()
+                          self.mainWindow?.presentNative(UIAlertController(
+                              title: "Demo Studio",
+                              message: "Не удалось создать локальное хранилище: \\(error.localizedDescription)",
+                              preferredStyle: .alert
+                          ))
+                          return true
+                      }
+                  }
+          """
 
-          chats_path = Path(
-              "submodules/ChatListUI/Sources/DemoStudio/DemoChatsController.swift"
-          )
-          chats = chats_path.read_text()
-          chats = chats.replace(
-              "self.presentationData.theme.chatList.itemPrimaryTextColor",
-              "self.presentationData.theme.list.itemPrimaryTextColor",
-          )
-          chats = chats.replace(
-              "self.presentationData.theme.chatList.itemSecondaryTextColor",
-              "self.presentationData.theme.list.itemSecondaryTextColor",
-          )
-          chats_path.write_text(chats)
+          if old_container in source:
+              source = source.replace(old_container, new_container, 1)
+          elif new_container not in source:
+              raise SystemExit("Unexpected App Group guard layout")
 
-          for relative_path in (
-              "submodules/ChatListUI/Sources/DemoStudio/DemoOwnerProfileController.swift",
-              "submodules/ChatListUI/Sources/DemoStudio/DemoProfileEditorController.swift",
-          ):
-              path = Path(relative_path)
-              source = path.read_text()
-              source = source.replace(
-                  "\n        (self.navigationController as? NavigationController)?.popViewController(animated: true)",
-                  "\n        let _ = (self.navigationController as? NavigationController)?.popViewController(animated: true)",
-              )
-              path.write_text(source)
-
-          gift_path = Path(
-              "submodules/TelegramUI/Components/Gifts/GiftViewScreen/"
-              "Sources/GiftViewScreen.swift"
+          required = (
+              "TelegramSideloadContainer",
+              "if let maybeAppGroupUrl",
+              "self.window?.makeKeyAndVisible()",
           )
-          gift = gift_path.read_text()
-          gift = gift.replace(
-              "                    addGiftToDemoStudio(gift, controller: controller)",
-              "                    self?.addGiftToDemoStudio(gift, controller: controller)",
-          )
-          gift = gift.replace(
-              "                    self.addGiftToDemoStudio(gift, controller: controller)",
-              "                    self?.addGiftToDemoStudio(gift, controller: controller)",
-          )
-          gift_path.write_text(gift)
+          for fragment in required:
+              if fragment not in source:
+                  raise SystemExit(f"Missing expected launch fix: {fragment}")
 
-          checks = {
-              ui_path: (
-                  "leadingSwipeActionsConfigurationForRowAt",
-                  "trailingSwipeActionsConfigurationForRowAt",
-                  "titleForHeaderInSection",
-                  "titleForFooterInSection",
-              ),
-              chats_path: (
-                  "theme.list.itemPrimaryTextColor",
-                  "theme.list.itemSecondaryTextColor",
-              ),
-              gift_path: (
-                  "self?.addGiftToDemoStudio(gift, controller: controller)",
-              ),
-          }
-          for path, required_fragments in checks.items():
-              source = path.read_text()
-              for fragment in required_fragments:
-                  if fragment not in source:
-                      raise SystemExit(f"{path}: missing {fragment}")
+          if 'message: "Error 2"' in source:
+              raise SystemExit("The black-screen App Group exit is still present")
 
-          if "func push(_ controller: ViewController)" in ui_path.read_text():
-              raise SystemExit("The conflicting push method is still present")
+          path.write_text(source)
           PY
 
           git diff --check
@@ -139,14 +108,12 @@ jobs:
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add \
-            submodules/ChatListUI/Sources/DemoStudio \
-            submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift
+          git add submodules/TelegramUI/Sources/AppDelegate.swift
 
           if git diff --cached --quiet; then
-            echo "Compile hotfix is already applied."
+            echo "Sideload launch hotfix is already applied."
             exit 0
           fi
 
-          git commit -m "Fix Demo Studio Swift compilation"
+          git commit -m "Fix black screen in sideloaded builds"
           git push origin "HEAD:${GITHUB_REF_NAME}"
