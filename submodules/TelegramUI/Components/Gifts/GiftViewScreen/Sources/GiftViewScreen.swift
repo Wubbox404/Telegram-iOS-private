@@ -1653,7 +1653,7 @@ private final class GiftViewSheetContent: CombinedComponent {
                     guard let controller = self?.getController() as? GiftViewScreen else {
                         return
                     }
-                    self.addGiftToDemoStudio(gift, controller: controller)
+                    self?.addGiftToDemoStudio(gift, controller: controller)
                 })))
 
                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_CopyLink, icon: { theme in
