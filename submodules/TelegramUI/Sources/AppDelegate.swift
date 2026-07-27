@@ -253,6 +253,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private let quickActionsDisposable = MetaDisposable()
     
     private var pushRegistry: PKPushRegistry?
+    private var supportsSystemPushRegistration = false
     
     private let notificationAuthorizationDisposable = MetaDisposable()
     
@@ -532,6 +533,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let baseAppBundleId = Bundle.main.bundleIdentifier!
         let appGroupName = "group.\(baseAppBundleId)"
         let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        self.supportsSystemPushRegistration = (
+            maybeAppGroupUrl != nil
+            && baseAppBundleId == "ph.telegra.Telegraph"
+        )
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
@@ -939,7 +944,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
             })
         }, requestSiriAuthorization: { completion in
-            if #available(iOS 10, *) {
+            if #available(iOS 10, *), buildConfig.isSiriEnabled {
                 INPreferences.requestSiriAuthorization { status in
                     if case .authorized = status {
                         completion(true)
@@ -1080,12 +1085,14 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             return true
         }
 
-        let pushRegistry = PKPushRegistry(queue: .main)
-        if #available(iOS 9.0, *) {
-            pushRegistry.desiredPushTypes = Set([.voIP])
+        if self.supportsSystemPushRegistration {
+            let pushRegistry = PKPushRegistry(queue: .main)
+            if #available(iOS 9.0, *) {
+                pushRegistry.desiredPushTypes = Set([.voIP])
+            }
+            self.pushRegistry = pushRegistry
+            pushRegistry.delegate = self
         }
-        self.pushRegistry = pushRegistry
-        pushRegistry.delegate = self
 
         self.accountManagerState = extractAccountManagerState(records: accountManager._internalAccountRecordsSync())
         let _ = (accountManager.accountRecords()
@@ -1392,7 +1399,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     }
                     self.registerForNotifications(context: context.context, authorize: authorizeNotifications)
                     
-                    self.resetIntentsIfNeeded(context: context.context)
+                    if buildConfig.isSiriEnabled {
+                        self.resetIntentsIfNeeded(context: context.context)
+                    }
                 }))
             } else {
                 self.mainWindow.viewController = nil
@@ -1625,7 +1634,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         
         if #available(iOS 12.0, *) {
-            UIApplication.shared.registerForRemoteNotifications()
+            self.registerForRemoteNotificationsIfAvailable()
         }
         
         let _ = self.urlSession(identifier: "\(baseAppBundleId).backroundSession")
@@ -2961,8 +2970,16 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     func requestNotificationTokenInvalidation() {
         UIApplication.shared.unregisterForRemoteNotifications()
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1.0, execute: {
-            UIApplication.shared.registerForRemoteNotifications()
+            self.registerForRemoteNotificationsIfAvailable()
         })
+    }
+
+    private func registerForRemoteNotificationsIfAvailable() {
+        guard self.supportsSystemPushRegistration else {
+            Logger.shared.log("App \(self.episodeId)", "Skipping remote notification registration without an application group")
+            return
+        }
+        UIApplication.shared.registerForRemoteNotifications()
     }
     
     private func registerForNotifications(context: AccountContextImpl, authorize: Bool = true, completion: @escaping (Bool) -> Void = { _ in }) {
@@ -3043,7 +3060,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 ])
                                 
                                 Logger.shared.log("App \(self.episodeId)", "register for notifications: invoke registerForRemoteNotifications")
-                                UIApplication.shared.registerForRemoteNotifications()
+                                self.registerForRemoteNotificationsIfAvailable()
                             }
                         }
                     })
