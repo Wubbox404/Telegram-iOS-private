@@ -1,4 +1,4 @@
-name: Apply Demo Studio V2
+name: Apply Demo Studio V2 Compile Hotfix
 
 on:
   workflow_dispatch:
@@ -14,77 +14,139 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
 
-      - name: Replace old Demo Mode with Demo Studio V2
+      - name: Apply verified compile fixes
         shell: bash
         run: |
           set -euo pipefail
 
-          ARCHIVE="telegram-ios-demo-mode-patch.zip"
-          EXPECTED_SHA256="0b818abd4c9af3a90afbdaf325ebcdcf7cc30e437eda96c005936c1885debc32"
-          PATCH_DIR="$RUNNER_TEMP/demo-studio-v2"
-          AUTH_FILE="submodules/AuthorizationUI/Sources/AuthorizationSequenceController.swift"
+          python3 - <<'PY'
+          from pathlib import Path
 
-          test -f "$ARCHIVE" || {
-            echo "::error::Не найден $ARCHIVE"
-            exit 1
+          ui_path = Path(
+              "submodules/ChatListUI/Sources/DemoStudio/DemoStudioUI.swift"
+          )
+          ui = ui_path.read_text()
+
+          old_push = """    func push(_ controller: ViewController) {
+                  (self.navigationController as? NavigationController)?.pushViewController(controller)
+              }
+          """
+          delegate_defaults = """    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+              }
+
+              func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+                  return nil
+              }
+
+              func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+                  return nil
+              }
+
+              func tableView(
+                  _ tableView: UITableView,
+                  leadingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+              ) -> UISwipeActionsConfiguration? {
+                  return nil
+              }
+
+              func tableView(
+                  _ tableView: UITableView,
+                  trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath
+              ) -> UISwipeActionsConfiguration? {
+                  return nil
+              }
+          """
+
+          if old_push in ui:
+              ui = ui.replace(old_push, delegate_defaults, 1)
+          elif delegate_defaults not in ui:
+              raise SystemExit("DemoStudioUI.swift has an unexpected layout")
+
+          ui_path.write_text(ui)
+
+          chats_path = Path(
+              "submodules/ChatListUI/Sources/DemoStudio/DemoChatsController.swift"
+          )
+          chats = chats_path.read_text()
+          chats = chats.replace(
+              "self.presentationData.theme.chatList.itemPrimaryTextColor",
+              "self.presentationData.theme.list.itemPrimaryTextColor",
+          )
+          chats = chats.replace(
+              "self.presentationData.theme.chatList.itemSecondaryTextColor",
+              "self.presentationData.theme.list.itemSecondaryTextColor",
+          )
+          chats_path.write_text(chats)
+
+          for relative_path in (
+              "submodules/ChatListUI/Sources/DemoStudio/DemoOwnerProfileController.swift",
+              "submodules/ChatListUI/Sources/DemoStudio/DemoProfileEditorController.swift",
+          ):
+              path = Path(relative_path)
+              source = path.read_text()
+              source = source.replace(
+                  "\n        (self.navigationController as? NavigationController)?.popViewController(animated: true)",
+                  "\n        let _ = (self.navigationController as? NavigationController)?.popViewController(animated: true)",
+              )
+              path.write_text(source)
+
+          gift_path = Path(
+              "submodules/TelegramUI/Components/Gifts/GiftViewScreen/"
+              "Sources/GiftViewScreen.swift"
+          )
+          gift = gift_path.read_text()
+          gift = gift.replace(
+              "                    addGiftToDemoStudio(gift, controller: controller)",
+              "                    self?.addGiftToDemoStudio(gift, controller: controller)",
+          )
+          gift = gift.replace(
+              "                    self.addGiftToDemoStudio(gift, controller: controller)",
+              "                    self?.addGiftToDemoStudio(gift, controller: controller)",
+          )
+          gift_path.write_text(gift)
+
+          checks = {
+              ui_path: (
+                  "leadingSwipeActionsConfigurationForRowAt",
+                  "trailingSwipeActionsConfigurationForRowAt",
+                  "titleForHeaderInSection",
+                  "titleForFooterInSection",
+              ),
+              chats_path: (
+                  "theme.list.itemPrimaryTextColor",
+                  "theme.list.itemSecondaryTextColor",
+              ),
+              gift_path: (
+                  "self?.addGiftToDemoStudio(gift, controller: controller)",
+              ),
           }
+          for path, required_fragments in checks.items():
+              source = path.read_text()
+              for fragment in required_fragments:
+                  if fragment not in source:
+                      raise SystemExit(f"{path}: missing {fragment}")
 
-          ACTUAL_SHA256="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
+          if "func push(_ controller: ViewController)" in ui_path.read_text():
+              raise SystemExit("The conflicting push method is still present")
+          PY
 
-          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256" || {
-            echo "::error::Неправильный ZIP: $ACTUAL_SHA256"
-            exit 1
-          }
-
-          rm -rf "$PATCH_DIR"
-          mkdir -p "$PATCH_DIR"
-          unzip -q "$ARCHIVE" -d "$PATCH_DIR"
-
-          OLD_REVERT="$PATCH_DIR/0001-Revert-Add-local-Telegram-demo-mode.patch"
-          V2_PATCH="$PATCH_DIR/0002-Add-local-Demo-Studio-over-real-Telegram-account.patch"
-
-          test -f "$OLD_REVERT"
-          test -f "$V2_PATCH"
+          git diff --check
 
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if [ -d "submodules/DemoStudioCore" ] && \
-             [ ! -d "submodules/AuthorizationUI/Sources/DemoMode" ]; then
-            echo "Demo Studio V2 уже установлен."
+          git add \
+            submodules/ChatListUI/Sources/DemoStudio \
+            submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift
+
+          if git diff --cached --quiet; then
+            echo "Compile hotfix is already applied."
             exit 0
           fi
 
-          # Убираем внедрение старой фальшивой авторизации.
-          if grep -Eq \
-            "DemoModeCredentials|demoModeRootController|enterDemoMode" \
-            "$AUTH_FILE"; then
-            git apply \
-              --include="$AUTH_FILE" \
-              "$OLD_REVERT"
-          fi
-
-          # Принудительно удаляем старый Demo Mode любой версии.
-          git rm -r --ignore-unmatch -- \
-            "DEMO_MODE.md" \
-            "submodules/AuthorizationUI/Sources/DemoMode" \
-            "submodules/TelegramUI/Images.xcassets/Demo Wallpaper.imageset"
-
-          git add "$AUTH_FILE"
-
-          if ! git diff --cached --quiet; then
-            git commit -m "Remove legacy Demo Mode"
-          fi
-
-          # Добавляем новый Demo Studio V2.
-          trap 'git am --abort >/dev/null 2>&1 || true' ERR
-          git am "$V2_PATCH"
-
-          # GitHub Actions не разрешает токену создавать другой workflow.
-          git rm --ignore-unmatch ".github/workflows/build-demo-studio-v2.yml"
-          git commit --amend --no-edit
-
+          git commit -m "Fix Demo Studio Swift compilation"
           git push origin "HEAD:${GITHUB_REF_NAME}"
