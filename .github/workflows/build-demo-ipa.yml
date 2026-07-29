@@ -86,15 +86,44 @@ jobs:
             grep -F 'build_setting_default = True'
 
       - name: Create a sideload-safe runtime configuration
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
         run: |
           python3 - <<'PY'
           import json
+          import os
+          import string
           from pathlib import Path
 
           source_path = Path("build-system/appstore-configuration.json")
           output_path = Path("build-system/sideload-configuration.json")
 
+          api_id = os.environ.get("TELEGRAM_API_ID", "").strip()
+          api_hash = os.environ.get("TELEGRAM_API_HASH", "").strip().lower()
+
+          if not api_id.isdigit() or api_id == "8":
+              raise SystemExit(
+                  "Set repository secret TELEGRAM_API_ID to your own numeric "
+                  "API ID from https://my.telegram.org/apps"
+              )
+          if (
+              len(api_hash) != 32
+              or any(character not in string.hexdigits for character in api_hash)
+              or api_hash == "7245de8e747a0d6fbe11f7cc14fcc0bb"
+          ):
+              raise SystemExit(
+                  "Set repository secret TELEGRAM_API_HASH to your own "
+                  "32-character API hash from https://my.telegram.org/apps"
+              )
+
           configuration = json.loads(source_path.read_text())
+          configuration["api_id"] = api_id
+          configuration["api_hash"] = api_hash
+          configuration["is_internal_build"] = "true"
+          configuration["is_appstore_build"] = "false"
+          configuration["appstore_id"] = "0"
+          configuration["premium_iap_product_id"] = ""
           configuration["enable_icloud"] = False
           configuration["enable_siri"] = False
           output_path.write_text(
@@ -106,10 +135,20 @@ jobs:
               raise SystemExit("Sideload builds must not initialize CloudKit")
           if verified["enable_siri"] is not False:
               raise SystemExit("Sideload builds must not initialize Siri")
+          if verified["api_id"] != api_id or verified["api_hash"] != api_hash:
+              raise SystemExit("Custom Telegram API credentials were not written")
+          if verified["is_internal_build"] != "true":
+              raise SystemExit("Sideload builds must use internal build mode")
+          if verified["is_appstore_build"] != "false":
+              raise SystemExit("Sideload builds must not use App Store mode")
           PY
           grep -F '"enable_icloud": false' \
             build-system/sideload-configuration.json
           grep -F '"enable_siri": false' \
+            build-system/sideload-configuration.json
+          grep -F '"is_internal_build": "true"' \
+            build-system/sideload-configuration.json
+          grep -F '"is_appstore_build": "false"' \
             build-system/sideload-configuration.json
 
       - name: Restore persistent Bazel cache
