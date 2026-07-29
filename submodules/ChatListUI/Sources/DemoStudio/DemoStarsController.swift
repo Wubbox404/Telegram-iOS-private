@@ -11,7 +11,8 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
     init(context: AccountContext) {
         super.init(context: context, title: "Звёзды Telegram", style: .insetGrouped)
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add,
+            title: "Операция",
+            style: .plain,
             target: self,
             action: #selector(self.addTransaction)
         )
@@ -47,7 +48,7 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return section == 0 ? 1 : self.transactions.count
+        return section == 0 ? 1 : max(1, self.transactions.count)
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
@@ -71,6 +72,17 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
             )
         }
         let transactions = self.transactions
+        if transactions.isEmpty {
+            let cell = self.configuredCell(
+                title: "История пока пуста",
+                subtitle: "Нажмите «Операция» сверху",
+                symbol: "clock.arrow.circlepath",
+                color: .systemOrange,
+                accessory: .none
+            )
+            cell.selectionStyle = .none
+            return cell
+        }
         guard indexPath.row < transactions.count else {
             return UITableViewCell()
         }

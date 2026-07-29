@@ -10,6 +10,7 @@ class DemoStudioTableController: ViewController, UITableViewDataSource, UITableV
     let context: AccountContext
     let tableView: UITableView
     var presentationData: PresentationData
+    private var tableNode: ASDisplayNode?
 
     init(context: AccountContext, title: String, style: UITableView.Style = .insetGrouped) {
         self.context = context
@@ -39,17 +40,55 @@ class DemoStudioTableController: ViewController, UITableViewDataSource, UITableV
     }
 
     override func loadDisplayNode() {
+        let rootNode = ASDisplayNode()
+        rootNode.backgroundColor = self.presentationData.theme.list.blocksBackgroundColor
+
         let tableView = self.tableView
-        self.displayNode = ASDisplayNode(viewBlock: {
+        let tableNode = ASDisplayNode(viewBlock: {
             return tableView
         })
+        self.tableNode = tableNode
+        rootNode.addSubnode(tableNode)
+        self.displayNode = rootNode
 
         self.tableView.dataSource = self
         self.tableView.delegate = self
         self.tableView.keyboardDismissMode = .interactive
+        self.tableView.contentInsetAdjustmentBehavior = .never
+        if #available(iOS 13.0, *) {
+            self.tableView.automaticallyAdjustsScrollIndicatorInsets = false
+        }
         self.tableView.backgroundColor = self.presentationData.theme.list.blocksBackgroundColor
         self.tableView.separatorColor = self.presentationData.theme.list.itemBlocksSeparatorColor
         self.tableView.tintColor = self.presentationData.theme.list.itemAccentColor
+
+        self.scrollToTop = { [weak tableView] in
+            tableView?.setContentOffset(.zero, animated: true)
+        }
+    }
+
+    override func containerLayoutUpdated(
+        _ layout: ContainerViewLayout,
+        transition: ContainedViewLayoutTransition
+    ) {
+        super.containerLayoutUpdated(layout, transition: transition)
+
+        let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
+        let tableFrame = CGRect(
+            x: 0.0,
+            y: navigationHeight,
+            width: layout.size.width,
+            height: max(0.0, layout.size.height - navigationHeight)
+        )
+        if let tableNode = self.tableNode {
+            transition.updateFrame(node: tableNode, frame: tableFrame)
+        }
+
+        let bottomInset = layout.insets(options: [.input]).bottom
+        if self.tableView.contentInset.bottom != bottomInset {
+            self.tableView.contentInset.bottom = bottomInset
+            self.tableView.verticalScrollIndicatorInsets.bottom = bottomInset
+        }
     }
 
     func numberOfSections(in tableView: UITableView) -> Int {

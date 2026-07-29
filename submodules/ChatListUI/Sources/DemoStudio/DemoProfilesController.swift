@@ -15,7 +15,8 @@ final class DemoProfilesController: DemoStudioTableController {
     init(context: AccountContext) {
         super.init(context: context, title: "Профили")
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add,
+            title: "Добавить",
+            style: .plain,
             target: self,
             action: #selector(self.addProfile)
         )
@@ -48,7 +49,7 @@ final class DemoProfilesController: DemoStudioTableController {
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.store.document.profiles.count
+        return max(1, self.store.document.profiles.count)
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
@@ -57,6 +58,17 @@ final class DemoProfilesController: DemoStudioTableController {
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let profiles = self.store.document.profiles
+        if profiles.isEmpty {
+            let cell = self.configuredCell(
+                title: "Профилей пока нет",
+                subtitle: "Нажмите «Добавить» сверху",
+                symbol: "person.crop.circle.badge.plus",
+                color: .systemPurple,
+                accessory: .none
+            )
+            cell.selectionStyle = .none
+            return cell
+        }
         guard indexPath.row < profiles.count else {
             return UITableViewCell()
         }

@@ -6789,15 +6789,11 @@ private final class ChatListLocationContext {
     var rightButton: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>?
     var proxyButton: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>?
     var storyButton: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>?
-    var demoButton: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>?
     
     var rightButtons: [AnyComponentWithIdentity<NavigationButtonComponentEnvironment>] {
         var result: [AnyComponentWithIdentity<NavigationButtonComponentEnvironment>] = []
         if let rightButton = self.rightButton {
             result.append(rightButton)
-        }
-        if let demoButton = self.demoButton {
-            result.append(demoButton)
         }
         if let storyButton = self.storyButton {
             result.append(storyButton)
@@ -6829,18 +6825,6 @@ private final class ChatListLocationContext {
         self.context = context
         self.location = location
         self.parentController = parentController
-
-        if case .chatList(.root) = location {
-            self.demoButton = AnyComponentWithIdentity(
-                id: "demoStudio",
-                component: AnyComponent(NavigationButtonComponent(
-                    content: .text(title: "ДЕМО", isBold: true),
-                    pressed: { [weak parentController] _ in
-                        parentController?.openDemoChats()
-                    }
-                ))
-            )
-        }
         
         let hasProxy = context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> (Bool, Bool) in

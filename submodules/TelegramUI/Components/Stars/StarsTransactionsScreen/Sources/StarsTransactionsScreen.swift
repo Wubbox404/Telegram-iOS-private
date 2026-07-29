@@ -25,6 +25,7 @@ import ItemListUI
 import StarsWithdrawalScreen
 import PremiumDiamondComponent
 import StatisticsUI
+import DemoStudioCore
 
 private let initialSubscriptionsDisplayedLimit: Int32 = 3
 
@@ -344,13 +345,23 @@ final class StarsTransactionsScreenComponent: Component {
             self.component = component
             self.state = state
             
+            let displayedBalance: StarsAmount
+            if component.starsContext.ton {
+                displayedBalance = self.starsState?.balance ?? StarsAmount.zero
+            } else {
+                displayedBalance = StarsAmount(
+                    value: DemoStudioStore.shared.document.starsBalance,
+                    nanos: 0
+                )
+            }
+
             var balanceUpdated = false
-            if let starsState = self.starsState {
-                if let previousBalance = self.previousBalance, starsState.balance != previousBalance {
+            if let previousBalance = self.previousBalance {
+                if displayedBalance != previousBalance {
                     balanceUpdated = true
                 }
-                self.previousBalance = starsState.balance
             }
+            self.previousBalance = displayedBalance
             
             let environment = environment[ViewControllerComponentContainer.Environment.self].value
             let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
@@ -557,7 +568,7 @@ final class StarsTransactionsScreenComponent: Component {
             if component.starsContext.ton {
                 formattedBalance = formatTonAmountText(self.starsState?.balance.value ?? 0, dateTimeFormat: environment.dateTimeFormat)
             } else {
-                formattedBalance = formatStarsAmountText(self.starsState?.balance ?? StarsAmount.zero, dateTimeFormat: environment.dateTimeFormat)
+                formattedBalance = formatStarsAmountText(displayedBalance, dateTimeFormat: environment.dateTimeFormat)
             }
             let smallLabelFont = Font.regular(11.0)
             let labelFont = Font.semibold(14.0)
@@ -754,7 +765,7 @@ final class StarsTransactionsScreenComponent: Component {
                             theme: environment.theme,
                             strings: environment.strings,
                             dateTimeFormat: environment.dateTimeFormat,
-                            count: self.starsState?.balance ?? StarsAmount.zero,
+                            count: displayedBalance,
                             currency: component.starsContext.ton ? .ton : .stars,
                             rate: nil,
                             actionTitle: component.starsContext.ton ? environment.strings.Ton_WithdrawViaFragment : (withdrawAvailable ? environment.strings.Stars_Intro_BuyShort : environment.strings.Stars_Intro_Buy),

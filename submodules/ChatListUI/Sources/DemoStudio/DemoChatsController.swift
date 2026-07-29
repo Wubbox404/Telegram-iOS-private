@@ -10,7 +10,8 @@ final class DemoChatsController: DemoStudioTableController {
     init(context: AccountContext) {
         super.init(context: context, title: "Локальные чаты", style: .plain)
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add,
+            title: "Добавить",
+            style: .plain,
             target: self,
             action: #selector(self.createChat)
         )
@@ -56,11 +57,22 @@ final class DemoChatsController: DemoStudioTableController {
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.chats.count
+        return max(1, self.chats.count)
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let chats = self.chats
+        if chats.isEmpty {
+            let cell = self.configuredCell(
+                title: "Локальных чатов пока нет",
+                subtitle: "Сначала добавьте профиль собеседника",
+                symbol: "bubble.left.and.bubble.right",
+                color: .systemBlue,
+                accessory: .none
+            )
+            cell.selectionStyle = .none
+            return cell
+        }
         guard indexPath.row < chats.count else {
             return UITableViewCell()
         }

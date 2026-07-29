@@ -236,6 +236,7 @@ final class DemoOwnerProfileController: DemoStudioTableController, UIImagePicker
             return
         }
         self.value.avatarFileName = fileName
+        self.saveValue()
         self.tableView.reloadData()
     }
 }

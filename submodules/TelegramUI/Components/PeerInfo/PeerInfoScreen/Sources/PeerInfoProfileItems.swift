@@ -16,6 +16,7 @@ import WebUI
 import AvatarNode
 import PeerNameColorItem
 import BoostLevelIconComponent
+import ChatListUI
 
 private let enabledPublicBioEntities: EnabledEntityTypes = [.allUrl, .mention, .hashtag]
 private let enabledPrivateBioEntities: EnabledEntityTypes = [.internalUrl, .mention, .hashtag]
@@ -79,6 +80,7 @@ func infoItems(
     }
     
     if case let .user(user) = data.peer {
+        let demoOwnerProfile = isMyProfile ? demoOwnerProfilePresentation() : nil
         let ItemCallList = 1000
         let ItemPersonalChannelHeader = 2000
         let ItemPersonalChannel = 2001
@@ -155,7 +157,8 @@ func infoItems(
             ))
         }
         
-        if let phone = user.phone {
+        let demoPhone = demoOwnerProfile.flatMap { $0.phone.isEmpty ? nil : $0.phone }
+        if let phone = demoPhone ?? user.phone {
             let formattedPhone = formatPhoneNumber(context: context, number: phone)
             let label: String
             if formattedPhone.hasPrefix("+888 ") {
@@ -163,19 +166,59 @@ func infoItems(
             } else {
                 label = presentationData.strings.ContactInfo_PhoneLabelMobile
             }
-            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemPhoneNumber, label: label, text: formattedPhone, textColor: .accent, action: { node, progress in
-                interaction.openPhone(phone, node, nil, progress)
-            }, longTapAction: nil, contextAction: { node, gesture, _ in
-                interaction.openPhone(phone, node, gesture, nil)
-            }, requestLayout: { animated in
+            let phoneAction: ((ASDisplayNode, Promise<Bool>?) -> Void)?
+            let phoneContextAction: ((ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?
+            if demoPhone != nil {
+                phoneAction = nil
+                phoneContextAction = nil
+            } else {
+                phoneAction = { node, progress in
+                    interaction.openPhone(phone, node, nil, progress)
+                }
+                phoneContextAction = { node, gesture, _ in
+                    interaction.openPhone(phone, node, gesture, nil)
+                }
+            }
+            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemPhoneNumber, label: label, text: formattedPhone, textColor: .accent, action: phoneAction, longTapAction: nil, contextAction: phoneContextAction, requestLayout: { animated in
                 interaction.requestLayout(animated)
             }))
         }
-        if let mainUsername = user.addressName {
+        let demoUsername = demoOwnerProfile.flatMap { $0.username.isEmpty ? nil : $0.username }
+        if let mainUsername = demoUsername ?? user.addressName {
             var additionalUsernames: String?
-            let usernames = user.usernames.filter { $0.isActive && $0.username != mainUsername }
-            if !usernames.isEmpty {
-                additionalUsernames = presentationData.strings.Profile_AdditionalUsernames(String(usernames.map { "@\($0.username)" }.joined(separator: ", "))).string
+            if demoUsername == nil {
+                let usernames = user.usernames.filter { $0.isActive && $0.username != mainUsername }
+                if !usernames.isEmpty {
+                    additionalUsernames = presentationData.strings.Profile_AdditionalUsernames(String(usernames.map { "@\($0.username)" }.joined(separator: ", "))).string
+                }
+            }
+
+            let usernameAction: ((ASDisplayNode, Promise<Bool>?) -> Void)?
+            let usernameLinkAction: ((TextLinkItemActionType, TextLinkItem, ASDisplayNode, CGRect?, Promise<Bool>?) -> Void)?
+            let usernameIconAction: (() -> Void)?
+            let usernameContextAction: ((ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?
+            if demoUsername != nil {
+                usernameAction = nil
+                usernameLinkAction = nil
+                usernameIconAction = nil
+                usernameContextAction = nil
+            } else {
+                usernameAction = { _, progress in
+                    interaction.openUsername(mainUsername, true, progress)
+                }
+                usernameLinkAction = { type, item, _, _, progress in
+                    if case .tap = type {
+                        if case let .mention(username) = item {
+                            interaction.openUsername(String(username[username.index(username.startIndex, offsetBy: 1)...]), false, progress)
+                        }
+                    }
+                }
+                usernameIconAction = {
+                    interaction.openQrCode()
+                }
+                usernameContextAction = { node, gesture, _ in
+                    interaction.openUsernameContextMenu(node, gesture)
+                }
             }
             
             items[currentPeerInfoSection]!.append(
@@ -186,19 +229,11 @@ func infoItems(
                     additionalText: additionalUsernames,
                     textColor: .accent,
                     icon: .qrCode,
-                    action: { _, progress in
-                        interaction.openUsername(mainUsername, true, progress)
-                    }, linkItemAction: { type, item, _, _, progress in
-                        if case .tap = type {
-                            if case let .mention(username) = item {
-                                interaction.openUsername(String(username[username.index(username.startIndex, offsetBy: 1)...]), false, progress)
-                            }
-                        }
-                    }, iconAction: {
-                        interaction.openQrCode()
-                    }, contextAction: { node, gesture, _ in
-                        interaction.openUsernameContextMenu(node, gesture)
-                    }, requestLayout: { animated in
+                    action: usernameAction,
+                    linkItemAction: usernameLinkAction,
+                    iconAction: usernameIconAction,
+                    contextAction: usernameContextAction,
+                    requestLayout: { animated in
                         interaction.requestLayout(animated)
                     }
                 )
@@ -226,10 +261,9 @@ func infoItems(
                 }))
             }
             
-            var hasAbout = false
-            if let about = cachedData.about, !about.isEmpty {
-                hasAbout = true
-            }
+            let demoAbout = demoOwnerProfile.flatMap { $0.bio.isEmpty ? nil : $0.bio }
+            let displayedAbout = demoAbout ?? cachedData.about
+            let hasAbout = !(displayedAbout ?? "").isEmpty
             var hasNote = false
             if let note = cachedData.note, !note.text.isEmpty {
                 hasNote = true
@@ -285,12 +319,12 @@ func infoItems(
                 
                 if hasAbout || hasWebApp {
                     var label: String = ""
-                    if let about = cachedData.about, !about.isEmpty {
+                    if let about = displayedAbout, !about.isEmpty {
                         label = user.botInfo == nil ? presentationData.strings.Profile_About : presentationData.strings.Profile_BotInfo
                     }
-                    items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemAbout, label: label, text: cachedData.about ?? "", textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: user.isPremium ? enabledPublicBioEntities : enabledPrivateBioEntities), action: isMyProfile ? { node, _ in
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemAbout, label: label, text: displayedAbout ?? "", textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: user.isPremium ? enabledPublicBioEntities : enabledPrivateBioEntities), action: isMyProfile && demoAbout == nil ? { node, _ in
                         bioContextAction(node, nil, nil)
-                    } : nil, linkItemAction: bioLinkAction, button: actionButton, contextAction: bioContextAction, requestLayout: { animated in
+                    } : nil, linkItemAction: demoAbout == nil ? bioLinkAction : nil, button: actionButton, contextAction: demoAbout == nil ? bioContextAction : nil, requestLayout: { animated in
                         interaction.requestLayout(animated)
                     }))
                 }

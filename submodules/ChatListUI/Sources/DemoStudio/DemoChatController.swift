@@ -14,6 +14,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
     private let scrollView = UIScrollView()
     private let stackView = UIStackView()
     private let composer = DemoChatComposerView()
+    private var scrollTopConstraint: NSLayoutConstraint?
     private var observer: NSObjectProtocol?
     private var profile: DemoProfile?
     private var pendingDraft = ""
@@ -81,10 +82,15 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
         self.composer.translatesAutoresizingMaskIntoConstraints = false
         rootNode.view.addSubview(self.composer)
 
+        let scrollTopConstraint = self.scrollView.topAnchor.constraint(
+            equalTo: rootNode.view.topAnchor
+        )
+        self.scrollTopConstraint = scrollTopConstraint
+
         NSLayoutConstraint.activate([
             self.scrollView.leadingAnchor.constraint(equalTo: rootNode.view.leadingAnchor),
             self.scrollView.trailingAnchor.constraint(equalTo: rootNode.view.trailingAnchor),
-            self.scrollView.topAnchor.constraint(equalTo: rootNode.view.safeAreaLayoutGuide.topAnchor),
+            scrollTopConstraint,
             self.scrollView.bottomAnchor.constraint(equalTo: self.composer.topAnchor),
             self.stackView.leadingAnchor.constraint(equalTo: self.scrollView.contentLayoutGuide.leadingAnchor, constant: 10.0),
             self.stackView.trailingAnchor.constraint(equalTo: self.scrollView.contentLayoutGuide.trailingAnchor, constant: -10.0),
@@ -151,6 +157,17 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
         transition: ContainedViewLayoutTransition
     ) {
         super.containerLayoutUpdated(layout, transition: transition)
+        self.scrollTopConstraint?.constant = self.navigationLayout(layout: layout).navigationFrame.maxY
+        if transition.isAnimated {
+            UIView.animate(
+                withDuration: 0.2,
+                animations: {
+                    self.displayNode.view.layoutIfNeeded()
+                }
+            )
+        } else {
+            self.displayNode.view.layoutIfNeeded()
+        }
         transition.updateFrame(node: self.wallpaperNode, frame: CGRect(origin: .zero, size: layout.size))
         self.wallpaperNode.updateLayout(
             size: layout.size,
@@ -168,7 +185,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
         self.profile = profile
         self.title = "\(profile.displayName)\(profile.isPremium ? " \(profile.premiumEmoji)" : "")"
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "info.circle"),
+            title: "Профиль",
             style: .plain,
             target: self,
             action: #selector(self.openProfile)

@@ -15,7 +15,8 @@ final class DemoGiftsController: DemoStudioTableController {
     init(context: AccountContext) {
         super.init(context: context, title: "Локальные подарки")
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add,
+            title: "Добавить",
+            style: .plain,
             target: self,
             action: #selector(self.addManualGift)
         )
@@ -54,7 +55,7 @@ final class DemoGiftsController: DemoStudioTableController {
         guard let section = Section(rawValue: section) else {
             return 0
         }
-        return section == .instructions ? 1 : self.gifts.count
+        return section == .instructions ? 1 : max(1, self.gifts.count)
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
@@ -80,6 +81,17 @@ final class DemoGiftsController: DemoStudioTableController {
             return cell
         }
         let gifts = self.gifts
+        if gifts.isEmpty {
+            let cell = self.configuredCell(
+                title: "Подарков пока нет",
+                subtitle: "Добавьте вручную или через меню подарка",
+                symbol: "gift",
+                color: .systemPink,
+                accessory: .none
+            )
+            cell.selectionStyle = .none
+            return cell
+        }
         guard indexPath.row < gifts.count else {
             return UITableViewCell()
         }

@@ -43,6 +43,10 @@ public func demoOwnerProfilePresentation() -> DemoOwnerProfilePresentation? {
     )
 }
 
+public func demoStarsBalancePresentation() -> Int64 {
+    return DemoStudioStore.shared.document.starsBalance
+}
+
 final class DemoStudioController: DemoStudioTableController {
     private enum Section: Int, CaseIterable {
         case notice

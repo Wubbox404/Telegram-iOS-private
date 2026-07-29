@@ -11,6 +11,7 @@ import MultilineTextWithEntitiesComponent
 import TextFormat
 import TelegramStringFormatting
 import Markdown
+import DemoStudioCore
 
 final class BalanceComponent: Component {
     private let context: AccountContext
@@ -40,7 +41,6 @@ final class BalanceComponent: Component {
         private var component: BalanceComponent?
         private var componentState: EmptyComponentState?
         
-        private var starsBalance: Int64 = 0
         private var tonBalance: Int64 = 0
         private var balanceDisposable: Disposable?
                         
@@ -79,11 +79,10 @@ final class BalanceComponent: Component {
                     self.balanceDisposable = combineLatest(queue: Queue.mainQueue(),
                         starsContext.state,
                         tonContext.state
-                    ).start(next: { [weak self] starsState, tonState in
+                    ).start(next: { [weak self] _, tonState in
                         guard let self else {
                             return
                         }
-                        self.starsBalance = starsState?.balance.value ?? 0
                         self.tonBalance = tonState?.balance.value ?? 0
                         if !self.isUpdating {
                             self.componentState?.updated()
@@ -95,7 +94,8 @@ final class BalanceComponent: Component {
             let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
 
             var rawString: String = ""
-            let starsBalanceString = "**⭐️\(presentationStringsFormattedNumber(Int32(clamping: self.starsBalance), presentationData.dateTimeFormat.groupingSeparator))**"
+            let displayedStarsBalance = DemoStudioStore.shared.document.starsBalance
+            let starsBalanceString = "**⭐️\(presentationStringsFormattedNumber(Int32(clamping: displayedStarsBalance), presentationData.dateTimeFormat.groupingSeparator))**"
             if self.tonBalance > 0 {
                 let tonBalanceString = "**💎\(formatTonAmountText(self.tonBalance, dateTimeFormat: presentationData.dateTimeFormat))**"
                 rawString = starsBalanceString + "\n" + tonBalanceString

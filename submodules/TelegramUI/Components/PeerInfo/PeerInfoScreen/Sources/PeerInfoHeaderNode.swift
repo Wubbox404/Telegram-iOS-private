@@ -1228,7 +1228,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 title = presentationData.strings.ChatList_AuthorHidden
             } else if let threadData = threadData {
                 title = threadData.info.title
-            } else if self.isSettings, let demoProfile = demoOwnerProfilePresentation(), !demoProfile.displayName.isEmpty {
+            } else if (self.isSettings || self.isMyProfile), let demoProfile = demoOwnerProfilePresentation(), !demoProfile.displayName.isEmpty {
                 title = demoProfile.displayName
             } else {
                 title = peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
@@ -1857,9 +1857,10 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         }
         
         self.avatarListNode.update(size: CGSize(), avatarSize: avatarSize, isExpanded: self.isAvatarExpanded, peer: peer, isForum: isForum, threadId: self.forumTopicThreadId, threadInfo: threadData?.info, theme: presentationData.theme, transition: transition)
-        if self.isSettings, let avatarPath = demoOwnerProfilePresentation()?.avatarPath, let image = UIImage(contentsOfFile: avatarPath) {
+        if (self.isSettings || self.isMyProfile), let avatarPath = demoOwnerProfilePresentation()?.avatarPath, let image = UIImage(contentsOfFile: avatarPath) {
             self.demoOwnerAvatarView.image = image
             self.demoOwnerAvatarView.isHidden = false
+            self.avatarListNode.avatarContainerNode.view.bringSubviewToFront(self.demoOwnerAvatarView)
         } else {
             self.demoOwnerAvatarView.image = nil
             self.demoOwnerAvatarView.isHidden = true

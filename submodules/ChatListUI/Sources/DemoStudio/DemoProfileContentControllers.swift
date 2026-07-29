@@ -13,7 +13,8 @@ class DemoProfileContentController: DemoStudioTableController, UIImagePickerCont
         self.profileId = profileId
         super.init(context: context, title: title)
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .add,
+            title: "Добавить",
+            style: .plain,
             target: self,
             action: #selector(self.addItem)
         )
