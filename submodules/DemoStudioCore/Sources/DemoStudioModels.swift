@@ -10,6 +10,60 @@ public enum DemoMessageDeliveryState: String, Codable, CaseIterable {
     case read
 }
 
+public enum DemoMessageKind: String, Codable, CaseIterable {
+    case text
+    case photo
+    case video
+    case voice
+    case videoMessage
+    case music
+    case document
+    case sticker
+    case animation
+    case contact
+    case location
+    case poll
+    case premiumGift
+    case starsGift
+    case starGift
+    case phoneCall
+    case screenshot
+    case autoDelete
+    case pinnedMessage
+    case historyCleared
+    case paidMessagesRefunded
+    case paidMessagesPrice
+    case service
+
+    public var title: String {
+        switch self {
+        case .text: return "Текст"
+        case .photo: return "Фотография"
+        case .video: return "Видео"
+        case .voice: return "Голосовое сообщение"
+        case .videoMessage: return "Видеосообщение"
+        case .music: return "Музыка"
+        case .document: return "Файл"
+        case .sticker: return "Стикер"
+        case .animation: return "GIF"
+        case .contact: return "Контакт"
+        case .location: return "Геопозиция"
+        case .poll: return "Опрос"
+        case .premiumGift: return "Подарок Telegram Premium"
+        case .starsGift: return "Подарок Stars"
+        case .starGift: return "Telegram Gift"
+        case .phoneCall: return "Звонок"
+        case .screenshot: return "Снимок экрана"
+        case .autoDelete: return "Автоудаление"
+        case .pinnedMessage: return "Закреплённое сообщение"
+        case .historyCleared: return "История очищена"
+        case .paidMessagesRefunded: return "Возврат платных сообщений"
+        case .paidMessagesPrice: return "Цена платных сообщений"
+        case .service: return "Системное сообщение"
+        }
+    }
+}
+
 public struct DemoPublication: Codable, Equatable, Identifiable {
     public var id: UUID
     public var text: String
@@ -108,8 +162,13 @@ public struct DemoProfile: Codable, Equatable, Identifiable {
     public var premiumEmoji: String
     public var premiumBackgroundHex: String
     public var ratingLevel: Int
+    public var ratingStars: Int64?
+    public var ratingCurrentLevelStars: Int64?
+    public var ratingNextLevelStars: Int64?
     public var isContact: Bool
     public var sourceUsername: String?
+    public var savedMusicTitle: String?
+    public var savedMusicPerformer: String?
     public var stories: [DemoStory]
     public var publications: [DemoPublication]
     public var gifts: [DemoGift]
@@ -128,8 +187,13 @@ public struct DemoProfile: Codable, Equatable, Identifiable {
         premiumEmoji: String = "⭐️",
         premiumBackgroundHex: String = "#6C5CE7",
         ratingLevel: Int = 0,
+        ratingStars: Int64? = nil,
+        ratingCurrentLevelStars: Int64? = nil,
+        ratingNextLevelStars: Int64? = nil,
         isContact: Bool = false,
         sourceUsername: String? = nil,
+        savedMusicTitle: String? = nil,
+        savedMusicPerformer: String? = nil,
         stories: [DemoStory] = [],
         publications: [DemoPublication] = [],
         gifts: [DemoGift] = []
@@ -146,9 +210,14 @@ public struct DemoProfile: Codable, Equatable, Identifiable {
         self.isPremium = isPremium
         self.premiumEmoji = premiumEmoji
         self.premiumBackgroundHex = premiumBackgroundHex
-        self.ratingLevel = min(10, max(0, ratingLevel))
+        self.ratingLevel = max(0, ratingLevel)
+        self.ratingStars = ratingStars.map { max(0, $0) }
+        self.ratingCurrentLevelStars = ratingCurrentLevelStars.map { max(0, $0) }
+        self.ratingNextLevelStars = ratingNextLevelStars.map { max(0, $0) }
         self.isContact = isContact
         self.sourceUsername = sourceUsername
+        self.savedMusicTitle = savedMusicTitle
+        self.savedMusicPerformer = savedMusicPerformer
         self.stories = stories
         self.publications = publications
         self.gifts = gifts
@@ -177,6 +246,13 @@ public struct DemoMessage: Codable, Equatable, Identifiable {
     public var replyToMessageId: UUID?
     public var mediaFileName: String?
     public var gift: DemoGift?
+    public var kind: DemoMessageKind?
+    public var secondaryText: String?
+    public var amount: Int64?
+    public var duration: Int?
+    public var latitude: Double?
+    public var longitude: Double?
+    public var options: [String]?
 
     public init(
         id: UUID = UUID(),
@@ -186,7 +262,14 @@ public struct DemoMessage: Codable, Equatable, Identifiable {
         deliveryState: DemoMessageDeliveryState = .read,
         replyToMessageId: UUID? = nil,
         mediaFileName: String? = nil,
-        gift: DemoGift? = nil
+        gift: DemoGift? = nil,
+        kind: DemoMessageKind? = nil,
+        secondaryText: String? = nil,
+        amount: Int64? = nil,
+        duration: Int? = nil,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        options: [String]? = nil
     ) {
         self.id = id
         self.author = author
@@ -196,6 +279,25 @@ public struct DemoMessage: Codable, Equatable, Identifiable {
         self.replyToMessageId = replyToMessageId
         self.mediaFileName = mediaFileName
         self.gift = gift
+        self.kind = kind
+        self.secondaryText = secondaryText
+        self.amount = amount
+        self.duration = duration
+        self.latitude = latitude
+        self.longitude = longitude
+        self.options = options
+    }
+
+    public var resolvedKind: DemoMessageKind {
+        if let kind {
+            return kind
+        } else if self.gift != nil {
+            return .starGift
+        } else if self.mediaFileName != nil {
+            return .photo
+        } else {
+            return .text
+        }
     }
 }
 
@@ -242,6 +344,50 @@ public struct DemoStarsTransaction: Codable, Equatable, Identifiable {
         case outgoing
     }
 
+    public enum Kind: String, Codable, CaseIterable {
+        case purchase
+        case gift
+        case transfer
+        case refund
+        case reaction
+        case subscription
+        case paidMessage
+        case starGift
+        case starGiftUpgrade
+        case starGiftResale
+        case businessTransfer
+        case giveaway
+        case ads
+        case apiExtension
+        case postsSearch
+        case auctionBid
+        case liveStreamPaidMessage
+        case custom
+
+        public var title: String {
+            switch self {
+            case .purchase: return "Покупка Stars"
+            case .gift: return "Подарок"
+            case .transfer: return "Перевод"
+            case .refund: return "Возврат"
+            case .reaction: return "Платная реакция"
+            case .subscription: return "Подписка"
+            case .paidMessage: return "Платное сообщение"
+            case .starGift: return "Telegram Gift"
+            case .starGiftUpgrade: return "Улучшение подарка"
+            case .starGiftResale: return "Перепродажа подарка"
+            case .businessTransfer: return "Бизнес-перевод"
+            case .giveaway: return "Розыгрыш"
+            case .ads: return "Telegram Ads"
+            case .apiExtension: return "Расширение API"
+            case .postsSearch: return "Поиск публикаций"
+            case .auctionBid: return "Ставка на аукционе"
+            case .liveStreamPaidMessage: return "Сообщение в трансляции"
+            case .custom: return "Другая операция"
+            }
+        }
+    }
+
     public var id: UUID
     public var direction: Direction
     public var amount: Int64
@@ -249,6 +395,9 @@ public struct DemoStarsTransaction: Codable, Equatable, Identifiable {
     public var peerName: String
     public var date: Date
     public var iconFileName: String?
+    public var kind: Kind?
+    public var isPending: Bool?
+    public var isFailed: Bool?
 
     public init(
         id: UUID = UUID(),
@@ -257,7 +406,10 @@ public struct DemoStarsTransaction: Codable, Equatable, Identifiable {
         title: String,
         peerName: String,
         date: Date = Date(),
-        iconFileName: String? = nil
+        iconFileName: String? = nil,
+        kind: Kind? = nil,
+        isPending: Bool? = nil,
+        isFailed: Bool? = nil
     ) {
         self.id = id
         self.direction = direction
@@ -266,6 +418,9 @@ public struct DemoStarsTransaction: Codable, Equatable, Identifiable {
         self.peerName = peerName
         self.date = date
         self.iconFileName = iconFileName
+        self.kind = kind
+        self.isPending = isPending
+        self.isFailed = isFailed
     }
 
     public var signedAmount: Int64 {
@@ -318,7 +473,7 @@ public struct DemoStudioDocument: Codable, Equatable {
     public var ownerProfile: DemoOwnerProfileOverride
 
     public init(
-        schemaVersion: Int = 2,
+        schemaVersion: Int = 3,
         profiles: [DemoProfile] = [],
         chats: [DemoChat] = [],
         starsBalance: Int64 = 0,

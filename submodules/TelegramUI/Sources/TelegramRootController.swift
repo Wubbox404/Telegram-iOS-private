@@ -106,7 +106,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         
         super.init(mode: .automaticMasterDetail, theme: NavigationControllerTheme(presentationTheme: self.presentationData.theme))
 
-        activateDemoStudio(accountPeerId: context.account.peerId.toInt64())
+        activateDemoStudio(context: context)
         
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).startStrict(next: { [weak self] presentationData in

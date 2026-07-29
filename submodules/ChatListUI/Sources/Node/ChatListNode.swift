@@ -23,6 +23,34 @@ import UndoUI
 import NewSessionInfoScreen
 import PresentationDataUtils
 import GlobalControlPanelsContext
+import DemoStudioCore
+
+private func demoChatPreview(_ chat: DemoChat) -> String {
+    if !chat.draft.isEmpty {
+        return "Черновик: \(chat.draft)"
+    }
+    guard let message = chat.messages.last else {
+        return "Локальный чат"
+    }
+    if let gift = message.gift {
+        return "🎁 \(gift.title)"
+    }
+    if message.text.isEmpty, message.mediaFileName != nil {
+        return "Фотография"
+    }
+    return message.text.isEmpty ? "Локальное сообщение" : message.text
+}
+
+private func demoChatAvatar(_ profile: DemoProfile) -> UIImage? {
+    if let url = DemoStudioStore.shared.assetURL(fileName: profile.avatarFileName),
+       let image = UIImage(contentsOfFile: url.path) {
+        return image
+    }
+    return DemoStudioColors.image(
+        symbol: profile.isPremium ? "star.fill" : "person.fill",
+        background: DemoStudioColors.avatarColor(seed: profile.displayName)
+    )
+}
 
 public enum ChatListNodeMode {
     case chatList(appendContacts: Bool)
@@ -86,6 +114,7 @@ public final class ChatListNodeInteraction {
     let togglePeerSelected: (EnginePeer, Int64?) -> Void
     let togglePeersSelection: ([PeerEntry], Bool) -> Void
     let additionalCategorySelected: (Int) -> Void
+    let demoChatSelected: (UUID) -> Void
     let messageSelected: (EnginePeer, Int64?, EngineMessage, ChatListNodeEntryPromoInfo?) -> Void
     let groupSelected: (EngineChatList.Group) -> Void
     let addContact: (String) -> Void
@@ -149,6 +178,7 @@ public final class ChatListNodeInteraction {
         togglePeerSelected: @escaping (EnginePeer, Int64?) -> Void,
         togglePeersSelection: @escaping ([PeerEntry], Bool) -> Void,
         additionalCategorySelected: @escaping (Int) -> Void,
+        demoChatSelected: @escaping (UUID) -> Void = { _ in },
         messageSelected: @escaping (EnginePeer, Int64?, EngineMessage, ChatListNodeEntryPromoInfo?) -> Void,
         groupSelected: @escaping (EngineChatList.Group) -> Void,
         addContact: @escaping (String) -> Void,
@@ -197,6 +227,7 @@ public final class ChatListNodeInteraction {
         self.togglePeerSelected = togglePeerSelected
         self.togglePeersSelection = togglePeersSelection
         self.additionalCategorySelected = additionalCategorySelected
+        self.demoChatSelected = demoChatSelected
         self.messageSelected = messageSelected
         self.groupSelected = groupSelected
         self.addContact = addContact
@@ -308,6 +339,7 @@ public struct ChatListNodeState: Equatable {
     public var selectedPeerMap: [EnginePeer.Id: EnginePeer]
     public var selectedThreadIds: Set<Int64>
     public var archiveStoryState: StoryState?
+    public var demoStudioRevision: Int
     
     public init(
         presentationData: ChatListPresentationData,
@@ -323,7 +355,8 @@ public struct ChatListNodeState: Equatable {
         hiddenItemShouldBeTemporaryRevealed: Bool,
         hiddenPsaPeerId: EnginePeer.Id?,
         selectedThreadIds: Set<Int64>,
-        archiveStoryState: StoryState?
+        archiveStoryState: StoryState?,
+        demoStudioRevision: Int = 0
     ) {
         self.presentationData = presentationData
         self.editing = editing
@@ -339,6 +372,7 @@ public struct ChatListNodeState: Equatable {
         self.hiddenPsaPeerId = hiddenPsaPeerId
         self.selectedThreadIds = selectedThreadIds
         self.archiveStoryState = archiveStoryState
+        self.demoStudioRevision = demoStudioRevision
     }
     
     public static func ==(lhs: ChatListNodeState, rhs: ChatListNodeState) -> Bool {
@@ -384,6 +418,9 @@ public struct ChatListNodeState: Equatable {
         if lhs.archiveStoryState != rhs.archiveStoryState {
             return false
         }
+        if lhs.demoStudioRevision != rhs.demoStudioRevision {
+            return false
+        }
         return true
     }
 }
@@ -412,6 +449,22 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                 header: header,
                 action: {
                     nodeInteraction.additionalCategorySelected(id)
+                }
+            ), directionHint: entry.directionHint)
+        case let .DemoChat(_, chat, profile, presentationData):
+            return ListViewInsertItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListAdditionalCategoryItem(
+                presentationData: ItemListPresentationData(theme: presentationData.theme, fontSize: presentationData.fontSize, strings: presentationData.strings, nameDisplayOrder: presentationData.nameDisplayOrder, dateTimeFormat: presentationData.dateTimeFormat),
+                context: context,
+                title: "\(profile.displayName)\(profile.isPremium ? " \(profile.premiumEmoji)" : "")",
+                subtitle: demoChatPreview(chat),
+                image: demoChatAvatar(profile),
+                appearance: .action,
+                isSelected: false,
+                badge: chat.unreadCount,
+                isDemoChat: true,
+                header: nil,
+                action: {
+                    nodeInteraction.demoChatSelected(chat.id)
                 }
             ), directionHint: entry.directionHint)
         case let .TopPeer(_, peer):
@@ -1157,6 +1210,22 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                         nodeInteraction.additionalCategorySelected(id)
                     }
                 ), directionHint: entry.directionHint)
+            case let .DemoChat(_, chat, profile, presentationData):
+                return ListViewUpdateItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListAdditionalCategoryItem(
+                    presentationData: ItemListPresentationData(theme: presentationData.theme, fontSize: presentationData.fontSize, strings: presentationData.strings, nameDisplayOrder: presentationData.nameDisplayOrder, dateTimeFormat: presentationData.dateTimeFormat),
+                    context: context,
+                    title: "\(profile.displayName)\(profile.isPremium ? " \(profile.premiumEmoji)" : "")",
+                    subtitle: demoChatPreview(chat),
+                    image: demoChatAvatar(profile),
+                    appearance: .action,
+                    isSelected: false,
+                    badge: chat.unreadCount,
+                    isDemoChat: true,
+                    header: nil,
+                    action: {
+                        nodeInteraction.demoChatSelected(chat.id)
+                    }
+                ), directionHint: entry.directionHint)
         }
     }
 }
@@ -1234,6 +1303,7 @@ public final class ChatListNode: ListViewImpl {
     public var peerSelected: ((EnginePeer, Int64?, Bool, Bool, ChatListNodeEntryPromoInfo?) -> Void)?
     public var disabledPeerSelected: ((EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void)?
     public var additionalCategorySelected: ((Int) -> Void)?
+    public var demoChatSelected: ((UUID) -> Void)?
     public var groupSelected: ((EngineChatList.Group) -> Void)?
     public var addContact: ((String) -> Void)?
     public var activateSearch: (() -> Void)?
@@ -1279,7 +1349,7 @@ public final class ChatListNode: ListViewImpl {
                     return nil
                 case let .PeerId(value):
                     return EnginePeer.Id(value)
-                case .ThreadId, .GroupId, .ContactId, .ArchiveIntro, .EmptyIntro, .SectionHeader, .Notice, .additionalCategory, .TopPeer:
+                case .ThreadId, .GroupId, .ContactId, .ArchiveIntro, .EmptyIntro, .SectionHeader, .Notice, .additionalCategory, .DemoChat, .TopPeer:
                     return nil
                 }
             }
@@ -1504,6 +1574,8 @@ public final class ChatListNode: ListViewImpl {
             }
         }, additionalCategorySelected: { [weak self] id in
             self?.additionalCategorySelected?(id)
+        }, demoChatSelected: { [weak self] chatId in
+            self?.demoChatSelected?(chatId)
         }, messageSelected: { [weak self] peer, threadId, message, promoInfo in
             if let strongSelf = self, let peerSelected = strongSelf.peerSelected {
                 var activateInput = false
@@ -2473,6 +2545,9 @@ public final class ChatListNode: ListViewImpl {
                     isEmpty = false
                     return true
                 case .GroupReferenceEntry:
+                    isEmpty = false
+                    return true
+                case .DemoChat:
                     isEmpty = false
                     return true
                 default:
@@ -3498,7 +3573,7 @@ public final class ChatListNode: ListViewImpl {
                         var hasArchive = false
                         loop: for entry in transition.chatListView.filteredEntries {
                             switch entry {
-                            case .GroupReferenceEntry, .HoleEntry, .PeerEntry, .ContactEntry:
+                            case .GroupReferenceEntry, .HoleEntry, .PeerEntry, .ContactEntry, .DemoChat:
                                 if case .GroupReferenceEntry = entry {
                                     hasArchive = true
                                 } else {

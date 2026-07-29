@@ -76,7 +76,7 @@ final class DemoProfilesController: DemoStudioTableController {
         let premium = profile.isPremium ? " \(profile.premiumEmoji)" : ""
         let subtitleParts = [
             profile.username.isEmpty ? nil : "@\(profile.username)",
-            "уровень \(profile.ratingLevel)/10",
+            "рейтинг \(profile.ratingLevel)",
             profile.sourceUsername.map { "копия @\($0)" }
         ].compactMap { $0 }
         let cell = self.configuredCell(
@@ -258,7 +258,18 @@ final class DemoProfilesController: DemoStudioTableController {
                 if let cachedUserData = cachedData as? CachedUserData {
                     profile.bio = cachedUserData.about ?? ""
                     if let starRating = cachedUserData.starRating {
-                        profile.ratingLevel = min(10, max(0, Int(starRating.level)))
+                        profile.ratingLevel = max(0, Int(starRating.level))
+                        profile.ratingStars = max(0, starRating.stars)
+                        profile.ratingCurrentLevelStars = max(0, starRating.currentLevelStars)
+                        profile.ratingNextLevelStars = starRating.nextLevelStars.map { max(0, $0) }
+                    }
+                    if let savedMusic = cachedUserData.savedMusic {
+                        for attribute in savedMusic.attributes {
+                            if case let .Audio(_, _, title, performer, _) = attribute {
+                                profile.savedMusicTitle = title
+                                profile.savedMusicPerformer = performer
+                            }
+                        }
                     }
                 }
                 if let avatarImage,

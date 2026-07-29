@@ -239,14 +239,17 @@ public final class DemoStudioStore {
     }
 
     private func normalizeLocked() {
-        self.documentValue.schemaVersion = 2
+        self.documentValue.schemaVersion = 3
         self.documentValue.starsBalance = max(0, self.documentValue.starsBalance)
 
         var profileIds = Set<UUID>()
         self.documentValue.profiles = self.documentValue.profiles.map { value in
             var profile = value
             profile.username = DemoProfile.normalizedUsername(profile.username)
-            profile.ratingLevel = min(10, max(0, profile.ratingLevel))
+            profile.ratingLevel = max(0, profile.ratingLevel)
+            profile.ratingStars = profile.ratingStars.map { max(0, $0) }
+            profile.ratingCurrentLevelStars = profile.ratingCurrentLevelStars.map { max(0, $0) }
+            profile.ratingNextLevelStars = profile.ratingNextLevelStars.map { max(0, $0) }
             profileIds.insert(profile.id)
             return profile
         }

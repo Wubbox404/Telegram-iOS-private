@@ -1584,6 +1584,35 @@ private final class GiftViewSheetContent: CombinedComponent {
             )
             controller.present(sheet, animated: true)
         }
+
+        func addGiftDirectlyToDemoProfile(
+            _ gift: StarGift.UniqueGift,
+            controller: GiftViewScreen
+        ) {
+            let demoGift = DemoGift(
+                telegramGiftId: gift.giftId,
+                slug: gift.slug,
+                title: gift.title,
+                number: Int64(gift.number),
+                displayedOnProfile: true
+            )
+            DemoStudioStore.shared.update { document in
+                if let index = document.ownerProfile.gifts.firstIndex(where: {
+                    $0.slug == gift.slug
+                }) {
+                    document.ownerProfile.gifts[index] = demoGift
+                } else {
+                    document.ownerProfile.gifts.append(demoGift)
+                }
+            }
+            let confirmation = UIAlertController(
+                title: "Добавлено в профиль",
+                message: "Подарок «\(gift.title)» виден только в Demo Studio.",
+                preferredStyle: .alert
+            )
+            confirmation.addAction(UIAlertAction(title: "OK", style: .default))
+            controller.present(confirmation, animated: true)
+        }
         
         func openMore() {
             guard let controller = self.getController() as? GiftViewScreen else {
@@ -1646,6 +1675,16 @@ private final class GiftViewSheetContent: CombinedComponent {
                     }
                 }
                 
+                items.append(.action(ContextMenuActionItem(text: "ДЕМО: Добавить в профиль", icon: { theme in
+                    return generateTintedImage(image: UIImage(systemName: "person.crop.circle.badge.plus"), color: theme.contextMenu.primaryColor)
+                }, action: { [weak self] c, _ in
+                    c?.dismiss(completion: nil)
+                    guard let controller = self?.getController() as? GiftViewScreen else {
+                        return
+                    }
+                    self?.addGiftDirectlyToDemoProfile(gift, controller: controller)
+                })))
+
                 items.append(.action(ContextMenuActionItem(text: "ДЕМО: Подарил мне", icon: { theme in
                     return generateTintedImage(image: UIImage(systemName: "gift.fill"), color: theme.contextMenu.primaryColor)
                 }, action: { [weak self] c, _ in

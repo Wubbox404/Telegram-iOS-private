@@ -49,6 +49,15 @@ public struct Namespaces {
         public static let CloudChannel = PeerId.Namespace._internalFromInt32Value(2)
         public static let SecretChat = PeerId.Namespace._internalFromInt32Value(3)
         public static let Empty = PeerId.Namespace.max
+
+        /// Demo Studio users deliberately live in the negative half of the
+        /// CloudUser id space. Telegram user ids are positive, while retaining
+        /// CloudUser here lets every existing chat and profile component render
+        /// the peer through its native path.
+        public static func isDemoStudioUser(_ peerId: PeerId) -> Bool {
+            return peerId.namespace == CloudUser
+                && peerId.id._internalGetInt64Value() < 0
+        }
     }
     
     public struct ItemCollection {

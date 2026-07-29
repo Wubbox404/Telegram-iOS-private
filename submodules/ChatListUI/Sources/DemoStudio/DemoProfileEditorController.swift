@@ -50,7 +50,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
         case .identity:
             return 7
         case .appearance:
-            return 6
+            return 10
         case .content:
             return 3
         case .chat:
@@ -82,7 +82,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
         case .identity:
             return "Локальный username может совпадать с существующим Telegram username."
         case .appearance:
-            return "Рейтинг ограничен диапазоном 0–10. Premium, эмодзи и фон существуют только в Demo Studio."
+            return "Уровень и точные значения рейтинга записываются в нативный CachedUserData профиля."
         default:
             return nil
         }
@@ -137,7 +137,33 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
             case 3:
                 return self.configuredCell(title: "Фон Premium", detail: self.profile.premiumBackgroundHex)
             case 4:
-                return self.configuredCell(title: "Уровень рейтинга", detail: "\(self.profile.ratingLevel) / 10")
+                return self.configuredCell(title: "Уровень рейтинга", detail: "\(self.profile.ratingLevel)")
+            case 5:
+                return self.configuredCell(
+                    title: "Всего звёзд рейтинга",
+                    detail: self.profile.ratingStars.map { String($0) } ?? "Автоматически"
+                )
+            case 6:
+                return self.configuredCell(
+                    title: "Звёзд на текущем уровне",
+                    detail: self.profile.ratingCurrentLevelStars.map { String($0) } ?? "Автоматически"
+                )
+            case 7:
+                return self.configuredCell(
+                    title: "Следующий уровень",
+                    detail: self.profile.ratingNextLevelStars.map { String($0) } ?? "Автоматически"
+                )
+            case 8:
+                let music = [self.profile.savedMusicTitle, self.profile.savedMusicPerformer]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " — ")
+                return self.configuredCell(
+                    title: "Музыка в профиле",
+                    detail: music.isEmpty ? "Не задана" : music,
+                    symbol: "music.note",
+                    color: .systemPink
+                )
             default:
                 let cell = self.configuredCell(title: "В контактах", accessory: .none)
                 let toggle = UISwitch()
@@ -249,7 +275,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
             picker.sourceType = .photoLibrary
             picker.delegate = self
             self.present(picker, animated: true)
-        case 1, 5:
+        case 1, 9:
             break
         case 2:
             self.prompt(title: "Premium-эмодзи", value: self.profile.premiumEmoji) { [weak self] value in
@@ -263,14 +289,66 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
             ) { [weak self] value in
                 self?.profile.premiumBackgroundHex = value
             }
-        default:
+        case 4:
             self.prompt(
                 title: "Уровень рейтинга",
                 value: "\(self.profile.ratingLevel)",
-                placeholder: "0–10",
+                placeholder: "0 или больше",
                 keyboardType: .numberPad
             ) { [weak self] value in
-                self?.profile.ratingLevel = min(10, max(0, Int(value) ?? 0))
+                self?.profile.ratingLevel = max(0, Int(value) ?? 0)
+            }
+        case 5:
+            self.prompt(
+                title: "Всего звёзд рейтинга",
+                value: self.profile.ratingStars.map { String($0) } ?? "",
+                placeholder: "Оставьте пустым для авто",
+                keyboardType: .numberPad
+            ) { [weak self] value in
+                self?.profile.ratingStars = value.isEmpty ? nil : max(0, Int64(value) ?? 0)
+            }
+        case 6:
+            self.prompt(
+                title: "Звёзд на текущем уровне",
+                value: self.profile.ratingCurrentLevelStars.map { String($0) } ?? "",
+                placeholder: "Оставьте пустым для авто",
+                keyboardType: .numberPad
+            ) { [weak self] value in
+                self?.profile.ratingCurrentLevelStars = value.isEmpty ? nil : max(0, Int64(value) ?? 0)
+            }
+        case 7:
+            self.prompt(
+                title: "Порог следующего уровня",
+                value: self.profile.ratingNextLevelStars.map { String($0) } ?? "",
+                placeholder: "Оставьте пустым для авто",
+                keyboardType: .numberPad
+            ) { [weak self] value in
+                self?.profile.ratingNextLevelStars = value.isEmpty ? nil : max(0, Int64(value) ?? 0)
+            }
+        default:
+            self.prompt(
+                title: "Название трека",
+                value: self.profile.savedMusicTitle ?? "",
+                placeholder: "Название"
+            ) { [weak self] value in
+                guard let self else {
+                    return
+                }
+                self.profile.savedMusicTitle = value.isEmpty ? nil : value
+                self.persistDraft()
+                self.tableView.reloadData()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    self.prompt(
+                        title: "Исполнитель",
+                        value: self.profile.savedMusicPerformer ?? "",
+                        placeholder: "Исполнитель"
+                    ) { [weak self] performer in
+                        self?.profile.savedMusicPerformer = performer.isEmpty ? nil : performer
+                    }
+                }
             }
         }
     }
@@ -289,17 +367,24 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
             keyboardType: keyboardType
         ) { [weak self] value in
             update(value)
+            self?.persistDraft()
             self?.tableView.reloadData()
         }
     }
 
     @objc private func togglePremium(_ sender: UISwitch) {
         self.profile.isPremium = sender.isOn
+        self.persistDraft()
         self.tableView.reloadData()
     }
 
     @objc private func toggleContact(_ sender: UISwitch) {
         self.profile.isContact = sender.isOn
+        self.persistDraft()
+    }
+
+    private func persistDraft() {
+        self.store.upsertProfile(self.profile)
     }
 
     @objc private func save() {
@@ -320,6 +405,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
             return
         }
         self.profile.avatarFileName = fileName
+        self.persistDraft()
         self.tableView.reloadData()
     }
 

@@ -20,6 +20,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
     private var pendingDraft = ""
     private var didLoadDraft = false
     private var pendingMediaAuthor: DemoMessageAuthor?
+    private var pendingMediaKind: DemoMessageKind?
 
     init(context: AccountContext, chatId: UUID) {
         self.context = context
@@ -134,6 +135,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
                 return
             }
             self.pendingMediaAuthor = author
+            self.pendingMediaKind = .photo
             let picker = UIImagePickerController()
             picker.sourceType = .photoLibrary
             picker.delegate = self
@@ -184,12 +186,19 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
         }
         self.profile = profile
         self.title = "\(profile.displayName)\(profile.isPremium ? " \(profile.premiumEmoji)" : "")"
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(
+        let profileButton = UIBarButtonItem(
             title: "Профиль",
             style: .plain,
             target: self,
             action: #selector(self.openProfile)
         )
+        let addButton = UIBarButtonItem(
+            image: UIImage(systemName: "plus.circle"),
+            style: .plain,
+            target: self,
+            action: #selector(self.addStudioMessage)
+        )
+        self.navigationItem.rightBarButtonItems = [profileButton, addButton]
         self.composer.updateProfileName(profile.displayName)
         if !self.didLoadDraft {
             self.didLoadDraft = true
@@ -240,6 +249,170 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
         )
     }
 
+    @objc private func addStudioMessage() {
+        let sheet = UIAlertController(
+            title: "Добавить в локальную историю",
+            message: "В Demo Studio можно редактировать обе стороны переписки.",
+            preferredStyle: .actionSheet
+        )
+        for kind in DemoMessageKind.allCases {
+            sheet.addAction(UIAlertAction(title: kind.title, style: .default, handler: { [weak self] _ in
+                self?.chooseAuthor(kind: kind)
+            }))
+        }
+        sheet.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+        sheet.popoverPresentationController?.barButtonItem = self.navigationItem.rightBarButtonItems?.last
+        self.present(sheet, animated: true)
+    }
+
+    private func chooseAuthor(kind: DemoMessageKind) {
+        let profileName = self.profile?.displayName ?? "Собеседник"
+        let sheet = UIAlertController(title: "Кто отправил?", message: kind.title, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: "Я", style: .default, handler: { [weak self] _ in
+            self?.collectMessage(kind: kind, author: .owner)
+        }))
+        sheet.addAction(UIAlertAction(title: profileName, style: .default, handler: { [weak self] _ in
+            self?.collectMessage(kind: kind, author: .profile)
+        }))
+        sheet.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = self.view
+        sheet.popoverPresentationController?.sourceRect = CGRect(
+            x: self.view.bounds.midX,
+            y: self.view.bounds.maxY - 1.0,
+            width: 1.0,
+            height: 1.0
+        )
+        self.present(sheet, animated: true)
+    }
+
+    private func collectMessage(kind: DemoMessageKind, author: DemoMessageAuthor) {
+        if kind == .photo {
+            self.pendingMediaAuthor = author
+            self.pendingMediaKind = kind
+            let picker = UIImagePickerController()
+            picker.sourceType = .photoLibrary
+            picker.delegate = self
+            self.present(picker, animated: true)
+            return
+        }
+
+        let defaultText: String
+        switch kind {
+        case .premiumGift:
+            defaultText = "Telegram Premium"
+        case .starsGift:
+            defaultText = "Подарок Stars"
+        case .starGift:
+            defaultText = "Telegram Gift"
+        case .phoneCall:
+            defaultText = "Звонок"
+        case .poll:
+            defaultText = "Новый опрос"
+        case .service:
+            defaultText = "Системное сообщение"
+        default:
+            defaultText = ""
+        }
+        self.presentMessagePrompt(
+            title: kind.title,
+            placeholder: kind == .text ? "Сообщение" : "Подпись или название",
+            initialValue: defaultText
+        ) { [weak self] text in
+            guard let self else {
+                return
+            }
+            if kind == .poll {
+                self.presentMessagePrompt(
+                    title: "Варианты ответа",
+                    placeholder: "Да, Нет",
+                    initialValue: "Да, Нет"
+                ) { [weak self] optionsText in
+                    let options = optionsText
+                        .split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    self?.appendStudioMessage(
+                        kind: kind,
+                        author: author,
+                        text: text,
+                        options: options
+                    )
+                }
+            } else if [.premiumGift, .starsGift, .paidMessagesRefunded, .paidMessagesPrice].contains(kind) {
+                self.presentMessagePrompt(
+                    title: "Количество Stars / сумма",
+                    placeholder: "50",
+                    initialValue: kind == .premiumGift ? "499" : "50",
+                    keyboardType: .numberPad
+                ) { [weak self] amountText in
+                    self?.appendStudioMessage(
+                        kind: kind,
+                        author: author,
+                        text: text,
+                        amount: Int64(amountText)
+                    )
+                }
+            } else if [.voice, .video, .videoMessage, .music, .animation, .phoneCall, .autoDelete].contains(kind) {
+                self.presentMessagePrompt(
+                    title: kind == .autoDelete ? "Период в секундах" : "Длительность в секундах",
+                    placeholder: kind == .autoDelete ? "86400" : "10",
+                    initialValue: kind == .autoDelete ? "86400" : "10",
+                    keyboardType: .numberPad
+                ) { [weak self] durationText in
+                    self?.appendStudioMessage(
+                        kind: kind,
+                        author: author,
+                        text: text,
+                        duration: Int(durationText)
+                    )
+                }
+            } else {
+                self.appendStudioMessage(kind: kind, author: author, text: text)
+            }
+        }
+    }
+
+    private func appendStudioMessage(
+        kind: DemoMessageKind,
+        author: DemoMessageAuthor,
+        text: String,
+        amount: Int64? = nil,
+        duration: Int? = nil,
+        options: [String]? = nil
+    ) {
+        self.store.appendMessage(
+            chatId: self.chatId,
+            message: DemoMessage(
+                author: author,
+                text: text,
+                kind: kind,
+                amount: amount,
+                duration: duration,
+                options: options
+            )
+        )
+    }
+
+    private func presentMessagePrompt(
+        title: String,
+        placeholder: String,
+        initialValue: String,
+        keyboardType: UIKeyboardType = .default,
+        completion: @escaping (String) -> Void
+    ) {
+        let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.placeholder = placeholder
+            textField.text = initialValue
+            textField.keyboardType = keyboardType
+        }
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Добавить", style: .default, handler: { [weak alert] _ in
+            completion(alert?.textFields?.first?.text ?? "")
+        }))
+        self.present(alert, animated: true)
+    }
+
     func imagePickerController(
         _ picker: UIImagePickerController,
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
@@ -247,6 +420,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
         picker.dismiss(animated: true)
         defer {
             self.pendingMediaAuthor = nil
+            self.pendingMediaKind = nil
         }
         guard let author = self.pendingMediaAuthor,
               let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage,
@@ -263,7 +437,8 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
             message: DemoMessage(
                 author: author,
                 text: "",
-                mediaFileName: fileName
+                mediaFileName: fileName,
+                kind: self.pendingMediaKind ?? .photo
             )
         )
     }
@@ -422,6 +597,16 @@ private final class DemoChatBubbleView: UIView {
         label.numberOfLines = 0
         contentStack.addArrangedSubview(label)
 
+        if message.author == .owner {
+            bubble.contentView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.72)
+            row.addArrangedSubview(spacer)
+            row.addArrangedSubview(bubble)
+        } else {
+            bubble.contentView.backgroundColor = UIColor.black.withAlphaComponent(0.20)
+            row.addArrangedSubview(bubble)
+            row.addArrangedSubview(spacer)
+        }
+
         NSLayoutConstraint.activate([
             contentStack.leadingAnchor.constraint(equalTo: bubble.contentView.leadingAnchor, constant: 8.0),
             contentStack.trailingAnchor.constraint(equalTo: bubble.contentView.trailingAnchor, constant: -8.0),
@@ -433,16 +618,6 @@ private final class DemoChatBubbleView: UIView {
             row.topAnchor.constraint(equalTo: self.topAnchor),
             row.bottomAnchor.constraint(equalTo: self.bottomAnchor)
         ])
-
-        if message.author == .owner {
-            bubble.contentView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.72)
-            row.addArrangedSubview(spacer)
-            row.addArrangedSubview(bubble)
-        } else {
-            bubble.contentView.backgroundColor = UIColor.black.withAlphaComponent(0.20)
-            row.addArrangedSubview(bubble)
-            row.addArrangedSubview(spacer)
-        }
 
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(self.longPressed(_:)))
         bubble.addGestureRecognizer(longPress)

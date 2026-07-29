@@ -88,9 +88,23 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
         }
         let transaction = transactions[indexPath.row]
         let sign = transaction.direction == .incoming ? "+" : "−"
+        let kindTitle = transaction.kind?.title
+        let statusTitle: String?
+        if transaction.isFailed == true {
+            statusTitle = "Ошибка"
+        } else if transaction.isPending == true {
+            statusTitle = "В обработке"
+        } else {
+            statusTitle = nil
+        }
         let cell = self.configuredCell(
             title: transaction.title.isEmpty ? transaction.peerName : transaction.title,
-            subtitle: "\(transaction.peerName) • \(Self.dateFormatter.string(from: transaction.date))",
+            subtitle: [
+                kindTitle,
+                transaction.peerName,
+                statusTitle,
+                Self.dateFormatter.string(from: transaction.date)
+            ].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • "),
             accessory: .none
         )
         let amountLabel = UILabel()
@@ -157,12 +171,11 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
 
     @objc private func addTransaction() {
         let sheet = UIAlertController(title: "Тип операции", message: nil, preferredStyle: .actionSheet)
-        sheet.addAction(UIAlertAction(title: "Зачисление", style: .default, handler: { [weak self] _ in
-            self?.collectTransaction(direction: .incoming, existing: nil)
-        }))
-        sheet.addAction(UIAlertAction(title: "Списание", style: .default, handler: { [weak self] _ in
-            self?.collectTransaction(direction: .outgoing, existing: nil)
-        }))
+        for kind in DemoStarsTransaction.Kind.allCases {
+            sheet.addAction(UIAlertAction(title: kind.title, style: .default, handler: { [weak self] _ in
+                self?.chooseDirection(kind: kind, existing: nil)
+            }))
+        }
         sheet.addAction(UIAlertAction(title: "Отмена", style: .cancel))
         sheet.popoverPresentationController?.barButtonItem = self.navigationItem.rightBarButtonItem
         self.present(sheet, animated: true)
@@ -170,6 +183,7 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
 
     private func collectTransaction(
         direction: DemoStarsTransaction.Direction,
+        kind: DemoStarsTransaction.Kind,
         existing: DemoStarsTransaction?
     ) {
         self.presentTextPrompt(
@@ -205,7 +219,10 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
                             title: title,
                             peerName: peerName,
                             date: Self.inputDateFormatter.date(from: dateText) ?? Date(),
-                            iconFileName: existing?.iconFileName
+                            iconFileName: existing?.iconFileName,
+                            kind: kind,
+                            isPending: existing?.isPending,
+                            isFailed: existing?.isFailed
                         )
                         self?.store.update { document in
                             if let index = document.starsTransactions.firstIndex(where: { $0.id == transaction.id }) {
@@ -225,6 +242,9 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
         sheet.addAction(UIAlertAction(title: "Изменить", style: .default, handler: { [weak self] _ in
             self?.chooseDirectionForEditing(transaction)
         }))
+        sheet.addAction(UIAlertAction(title: "Статус операции", style: .default, handler: { [weak self] _ in
+            self?.chooseStatus(transaction)
+        }))
         sheet.addAction(UIAlertAction(title: "Выбрать иконку из Фото", style: .default, handler: { [weak self] _ in
             self?.iconTransactionId = transaction.id
             let picker = UIImagePickerController()
@@ -243,13 +263,49 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
         self.present(sheet, animated: true)
     }
 
+    private func chooseStatus(_ transaction: DemoStarsTransaction) {
+        let sheet = UIAlertController(title: "Статус операции", message: nil, preferredStyle: .actionSheet)
+        let values: [(String, Bool?, Bool?)] = [
+            ("Завершена", nil, nil),
+            ("В обработке", true, false),
+            ("Ошибка", false, true)
+        ]
+        for (title, isPending, isFailed) in values {
+            sheet.addAction(UIAlertAction(title: title, style: .default, handler: { [weak self] _ in
+                self?.store.update { document in
+                    guard let index = document.starsTransactions.firstIndex(where: { $0.id == transaction.id }) else {
+                        return
+                    }
+                    document.starsTransactions[index].isPending = isPending
+                    document.starsTransactions[index].isFailed = isFailed
+                }
+            }))
+        }
+        sheet.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = self.view
+        sheet.popoverPresentationController?.sourceRect = CGRect(
+            x: self.view.bounds.midX,
+            y: self.view.bounds.maxY,
+            width: 1.0,
+            height: 1.0
+        )
+        self.present(sheet, animated: true)
+    }
+
     private func chooseDirectionForEditing(_ transaction: DemoStarsTransaction) {
+        self.chooseDirection(kind: transaction.kind ?? .custom, existing: transaction)
+    }
+
+    private func chooseDirection(
+        kind: DemoStarsTransaction.Kind,
+        existing: DemoStarsTransaction?
+    ) {
         let sheet = UIAlertController(title: "Тип операции", message: nil, preferredStyle: .actionSheet)
         sheet.addAction(UIAlertAction(title: "Зачисление", style: .default, handler: { [weak self] _ in
-            self?.collectTransaction(direction: .incoming, existing: transaction)
+            self?.collectTransaction(direction: .incoming, kind: kind, existing: existing)
         }))
         sheet.addAction(UIAlertAction(title: "Списание", style: .default, handler: { [weak self] _ in
-            self?.collectTransaction(direction: .outgoing, existing: transaction)
+            self?.collectTransaction(direction: .outgoing, kind: kind, existing: existing)
         }))
         sheet.addAction(UIAlertAction(title: "Отмена", style: .cancel))
         sheet.popoverPresentationController?.sourceView = self.view

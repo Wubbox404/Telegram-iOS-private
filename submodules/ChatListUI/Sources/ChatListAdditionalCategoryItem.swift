@@ -15,9 +15,12 @@ public class ChatListAdditionalCategoryItem: ItemListItem, ListViewItemWithHeade
     public let sectionId: ItemListSectionId
     let context: AccountContext
     let title: String
+    let subtitle: String?
     let image: UIImage?
     let appearance: ChatListNodeAdditionalCategory.Appearance
     let isSelected: Bool
+    let badge: Int
+    let isDemoChat: Bool
     let action: () -> Void
     
     public let selectable: Bool = true
@@ -29,9 +32,12 @@ public class ChatListAdditionalCategoryItem: ItemListItem, ListViewItemWithHeade
         sectionId: ItemListSectionId = 0,
         context: AccountContext,
         title: String,
+        subtitle: String? = nil,
         image: UIImage?,
         appearance: ChatListNodeAdditionalCategory.Appearance,
         isSelected: Bool,
+        badge: Int = 0,
+        isDemoChat: Bool = false,
         header: ListViewItemHeader?,
         action: @escaping () -> Void
     ) {
@@ -39,9 +45,12 @@ public class ChatListAdditionalCategoryItem: ItemListItem, ListViewItemWithHeade
         self.sectionId = sectionId
         self.context = context
         self.title = title
+        self.subtitle = subtitle
         self.image = image
         self.appearance = appearance
         self.isSelected = isSelected
+        self.badge = badge
+        self.isDemoChat = isDemoChat
         self.action = action
         
         switch appearance {
@@ -146,6 +155,8 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
     
     private let avatarNode: ASImageNode
     private let titleNode: TextNode
+    private let subtitleNode: TextNode
+    private let badgeNode: TextNode
     private var selectionNode: CheckNode?
     
     private var isHighlighted: Bool = false
@@ -166,8 +177,12 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
         self.highlightedBackgroundNode.isLayerBacked = true
         
         self.avatarNode = ASImageNode()
+        self.avatarNode.contentMode = .scaleAspectFill
+        self.avatarNode.clipsToBounds = true
         
         self.titleNode = TextNode()
+        self.subtitleNode = TextNode()
+        self.badgeNode = TextNode()
         
         super.init(layerBacked: false, rotated: false, seeThrough: false)
         
@@ -179,6 +194,8 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
         
         self.addSubnode(self.avatarNode)
         self.addSubnode(self.titleNode)
+        self.addSubnode(self.subtitleNode)
+        self.addSubnode(self.badgeNode)
     }
     
     override public func layoutForParams(_ params: ListViewItemLayoutParams, item: ListViewItem, previousItem: ListViewItem?, nextItem: ListViewItem?) {
@@ -228,6 +245,8 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
     
     public func asyncLayout() -> (_ item: ChatListAdditionalCategoryItem, _ params: ListViewItemLayoutParams, _ first: Bool, _ last: Bool, _ firstWithHeader: Bool, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> (Signal<Void, NoError>?, (Bool, Bool) -> Void)) {
         let makeTitleLayout = TextNode.asyncLayout(self.titleNode)
+        let makeSubtitleLayout = TextNode.asyncLayout(self.subtitleNode)
+        let makeBadgeLayout = TextNode.asyncLayout(self.badgeNode)
         let currentSelectionNode = self.selectionNode
         
         let currentItem = self.item
@@ -235,15 +254,20 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
         return { [weak self] item, params, first, last, firstWithHeader, neighbors in
             var updatedTheme: PresentationTheme?
             
-            let titleFont = Font.regular(item.presentationData.fontSize.itemListBaseFontSize)
+            let titleFont = item.isDemoChat
+                ? Font.semibold(17.0)
+                : Font.regular(item.presentationData.fontSize.itemListBaseFontSize)
             
-            let avatarDiameter: CGFloat = 40.0
+            let avatarDiameter: CGFloat = item.isDemoChat ? 54.0 : 40.0
             
             if currentItem?.presentationData.theme !== item.presentationData.theme {
                 updatedTheme = item.presentationData.theme
             }
-            let leftInset: CGFloat = 65.0 + params.leftInset
+            let leftInset: CGFloat = (item.isDemoChat ? 78.0 : 65.0) + params.leftInset
             var rightInset: CGFloat = 10.0 + params.rightInset
+            if item.isDemoChat && item.badge > 0 {
+                rightInset += 48.0
+            }
             
             let updatedSelectionNode: CheckNode?
             let isSelected = item.isSelected
@@ -266,7 +290,9 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
             
             var titleAttributedString: NSAttributedString?
             let textColor: UIColor
-            if case .action = item.appearance {
+            if item.isDemoChat {
+                textColor = item.presentationData.theme.list.itemPrimaryTextColor
+            } else if case .action = item.appearance {
                 textColor = item.presentationData.theme.list.itemAccentColor
             } else {
                 textColor = item.presentationData.theme.list.itemPrimaryTextColor
@@ -274,16 +300,76 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
             titleAttributedString = NSAttributedString(string: item.title, font: titleFont, textColor: textColor)
             
             let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: titleAttributedString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0.0, params.width - leftInset - rightInset), height: CGFloat.infinity), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+
+            let subtitleAttributedString = item.subtitle.flatMap {
+                NSAttributedString(
+                    string: $0,
+                    font: Font.regular(15.0),
+                    textColor: item.presentationData.theme.list.itemSecondaryTextColor
+                )
+            }
+            let (subtitleLayout, subtitleApply) = makeSubtitleLayout(TextNodeLayoutArguments(
+                attributedString: subtitleAttributedString,
+                backgroundColor: nil,
+                maximumNumberOfLines: 1,
+                truncationType: .end,
+                constrainedSize: CGSize(width: max(0.0, params.width - leftInset - rightInset), height: CGFloat.infinity),
+                alignment: .natural,
+                cutout: nil,
+                insets: UIEdgeInsets()
+            ))
+
+            let badgeAttributedString: NSAttributedString?
+            if item.isDemoChat && item.badge > 0 {
+                badgeAttributedString = NSAttributedString(
+                    string: "\(item.badge)",
+                    font: Font.semibold(13.0),
+                    textColor: .white
+                )
+            } else {
+                badgeAttributedString = nil
+            }
+            let (badgeLayout, badgeApply) = makeBadgeLayout(TextNodeLayoutArguments(
+                attributedString: badgeAttributedString,
+                backgroundColor: nil,
+                maximumNumberOfLines: 1,
+                truncationType: .end,
+                constrainedSize: CGSize(width: 42.0, height: 24.0),
+                alignment: .center,
+                cutout: nil,
+                insets: UIEdgeInsets()
+            ))
             
-            let verticalInset: CGFloat = 13.0
+            let verticalInset: CGFloat = item.isDemoChat ? 9.0 : 13.0
             
             let statusHeightComponent: CGFloat
-            statusHeightComponent = 0.0
+            statusHeightComponent = item.isDemoChat && subtitleAttributedString != nil
+                ? subtitleLayout.size.height + 2.0
+                : 0.0
             
             let nodeLayout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: verticalInset * 2.0 + titleLayout.size.height + statusHeightComponent), insets: UIEdgeInsets(top: firstWithHeader ? 29.0 : 0.0, left: 0.0, bottom: 0.0, right: 0.0))
             
             let titleFrame: CGRect
-            titleFrame = CGRect(origin: CGPoint(x: leftInset, y: floor((nodeLayout.contentSize.height - titleLayout.size.height) / 2.0)), size: titleLayout.size)
+            if item.isDemoChat && subtitleAttributedString != nil {
+                let totalTextHeight = titleLayout.size.height + 2.0 + subtitleLayout.size.height
+                titleFrame = CGRect(
+                    origin: CGPoint(x: leftInset, y: floor((nodeLayout.contentSize.height - totalTextHeight) / 2.0)),
+                    size: titleLayout.size
+                )
+            } else {
+                titleFrame = CGRect(origin: CGPoint(x: leftInset, y: floor((nodeLayout.contentSize.height - titleLayout.size.height) / 2.0)), size: titleLayout.size)
+            }
+            let subtitleFrame = CGRect(
+                origin: CGPoint(x: leftInset, y: titleFrame.maxY + 2.0),
+                size: subtitleLayout.size
+            )
+            let badgeFrame = CGRect(
+                origin: CGPoint(
+                    x: params.width - params.rightInset - badgeLayout.size.width - 18.0,
+                    y: floor((nodeLayout.contentSize.height - badgeLayout.size.height) / 2.0)
+                ),
+                size: badgeLayout.size
+            )
             
             return (nodeLayout, { [weak self] in
                 if let strongSelf = self {
@@ -292,6 +378,7 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
                             strongSelf.item = item
                             
                             strongSelf.accessibilityLabel = titleAttributedString?.string
+                            strongSelf.accessibilityValue = subtitleAttributedString?.string
                             
                             //strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: nodeLayout.contentSize)
                             //strongSelf.containerNode.isGestureEnabled = item.contextAction != nil
@@ -316,11 +403,36 @@ public class ChatListAdditionalCategoryItemNode: ItemListRevealOptionsItemNode {
                             
                             if let image = item.image {
                                 strongSelf.avatarNode.image = item.image
-                                transition.updateFrame(node: strongSelf.avatarNode, frame: CGRect(origin: CGPoint(x: revealOffset + leftInset - 50.0 + floor((avatarDiameter - image.size.width) / 2.0), y: floor((nodeLayout.contentSize.height - image.size.width) / 2.0)), size: image.size))
+                                if item.isDemoChat {
+                                    strongSelf.avatarNode.cornerRadius = avatarDiameter / 2.0
+                                    transition.updateFrame(
+                                        node: strongSelf.avatarNode,
+                                        frame: CGRect(
+                                            origin: CGPoint(
+                                                x: revealOffset + params.leftInset + 12.0,
+                                                y: floor((nodeLayout.contentSize.height - avatarDiameter) / 2.0)
+                                            ),
+                                            size: CGSize(width: avatarDiameter, height: avatarDiameter)
+                                        )
+                                    )
+                                } else {
+                                    strongSelf.avatarNode.cornerRadius = 0.0
+                                    transition.updateFrame(node: strongSelf.avatarNode, frame: CGRect(origin: CGPoint(x: revealOffset + leftInset - 50.0 + floor((avatarDiameter - image.size.width) / 2.0), y: floor((nodeLayout.contentSize.height - image.size.width) / 2.0)), size: image.size))
+                                }
+                            } else {
+                                strongSelf.avatarNode.image = nil
                             }
                             
                             let _ = titleApply()
                             transition.updateFrame(node: strongSelf.titleNode, frame: titleFrame.offsetBy(dx: revealOffset, dy: 0.0))
+                            let _ = subtitleApply()
+                            transition.updateFrame(node: strongSelf.subtitleNode, frame: subtitleFrame.offsetBy(dx: revealOffset, dy: 0.0))
+                            let _ = badgeApply()
+                            strongSelf.badgeNode.backgroundColor = item.badge > 0
+                                ? item.presentationData.theme.list.itemAccentColor
+                                : .clear
+                            strongSelf.badgeNode.cornerRadius = badgeLayout.size.height / 2.0
+                            transition.updateFrame(node: strongSelf.badgeNode, frame: badgeFrame.offsetBy(dx: revealOffset, dy: 0.0))
                             
                             if let updatedSelectionNode = updatedSelectionNode {
                                 if strongSelf.selectionNode !== updatedSelectionNode {

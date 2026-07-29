@@ -161,6 +161,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             previousItemNode.listNode.setPeerThreadPinned = nil
             previousItemNode.listNode.setPeerThreadHidden = nil
             previousItemNode.listNode.peerSelected = nil
+            previousItemNode.listNode.demoChatSelected = nil
             previousItemNode.listNode.disabledPeerSelected = nil
             previousItemNode.listNode.groupSelected = nil
             previousItemNode.listNode.updatePeerGrouping = nil
@@ -218,6 +219,9 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         }
         itemNode.listNode.peerSelected = { [weak self] peerId, threadId, animated, activateInput, promoInfo in
             self?.peerSelected?(peerId, threadId, animated, activateInput, promoInfo)
+        }
+        itemNode.listNode.demoChatSelected = { [weak self] chatId in
+            self?.demoChatSelected?(chatId)
         }
         itemNode.listNode.disabledPeerSelected = { [weak self] peerId, threadId, reason in
             self?.disabledPeerSelected?(peerId, threadId, reason)
@@ -432,6 +436,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     var setPeerThreadPinned: ((EnginePeer.Id, Int64, Bool) -> Void)?
     var setPeerThreadHidden: ((EnginePeer.Id, Int64, Bool) -> Void)?
     public var peerSelected: ((EnginePeer, Int64?, Bool, Bool, ChatListNodeEntryPromoInfo?) -> Void)?
+    public var demoChatSelected: ((UUID) -> Void)?
     public var disabledPeerSelected: ((EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void)?
     var groupSelected: ((EngineChatList.Group) -> Void)?
     var openCommunity: ((EnginePeer.Id) -> Void)?
@@ -456,6 +461,23 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     var didBeginSelectingChats: (() -> Void)?
     var canExpandHiddenItems: (() -> Bool)?
     public var displayFilterLimit: (() -> Void)?
+
+    func reloadDemoStudioItems() {
+        for itemNode in self.itemNodes.values {
+            itemNode.listNode.updateState { state in
+                var state = state
+                state.demoStudioRevision &+= 1
+                return state
+            }
+        }
+        if let pendingItemNode = self.pendingItemNode {
+            pendingItemNode.1.listNode.updateState { state in
+                var state = state
+                state.demoStudioRevision &+= 1
+                return state
+            }
+        }
+    }
     
     public var pinnedHeaderDisplayFraction: CGFloat {
         guard let currentItemNodeValue = self.currentItemNodeValue else {
@@ -2351,6 +2373,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 inlineStackContainerNode.setPeerThreadPinned = self.mainContainerNode.setPeerThreadPinned
                 inlineStackContainerNode.setPeerThreadHidden = self.mainContainerNode.setPeerThreadHidden
                 inlineStackContainerNode.peerSelected = self.mainContainerNode.peerSelected
+                inlineStackContainerNode.demoChatSelected = self.mainContainerNode.demoChatSelected
                 inlineStackContainerNode.groupSelected = self.mainContainerNode.groupSelected
                 inlineStackContainerNode.openCommunity = self.mainContainerNode.openCommunity
                 inlineStackContainerNode.ungroupCommunity = self.mainContainerNode.ungroupCommunity

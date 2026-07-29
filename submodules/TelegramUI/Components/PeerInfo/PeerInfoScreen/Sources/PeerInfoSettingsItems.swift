@@ -26,7 +26,6 @@ enum SettingsSection: Int, CaseIterable {
     case payment
     case extra
     case support
-    case demoStudio
 }
 
 func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
@@ -235,6 +234,25 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_PrivacySettings, icon: PresentationResourcesSettings.security, action: {
         interaction.openSettings(.privacyAndSecurity)
     }))
+    let demoStudioIcon = UIGraphicsImageRenderer(size: CGSize(width: 30.0, height: 30.0)).image { _ in
+        UIColor.systemIndigo.setFill()
+        UIBezierPath(
+            roundedRect: CGRect(x: 0.0, y: 0.0, width: 30.0, height: 30.0),
+            cornerRadius: 7.0
+        ).fill()
+        UIImage(systemName: "slider.horizontal.3")?
+            .withTintColor(.white, renderingMode: .alwaysOriginal)
+            .draw(in: CGRect(x: 6.0, y: 6.0, width: 18.0, height: 18.0))
+    }
+    items[.advanced]!.append(PeerInfoScreenDisclosureItem(
+        id: 100,
+        label: .text("Локально"),
+        text: "Demo Studio",
+        icon: demoStudioIcon,
+        action: {
+            interaction.openSettings(.demoStudio)
+        }
+    ))
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_ChatSettings, icon: PresentationResourcesSettings.dataAndStorage, action: {
         interaction.openSettings(.dataAndStorage)
     }))
@@ -336,26 +354,6 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.tips)
     }))
 
-    let demoStudioIcon = UIGraphicsImageRenderer(size: CGSize(width: 30.0, height: 30.0)).image { _ in
-        UIColor.systemIndigo.setFill()
-        UIBezierPath(
-            roundedRect: CGRect(x: 0.0, y: 0.0, width: 30.0, height: 30.0),
-            cornerRadius: 7.0
-        ).fill()
-        UIImage(systemName: "slider.horizontal.3")?
-            .withTintColor(.white, renderingMode: .alwaysOriginal)
-            .draw(in: CGRect(x: 6.0, y: 6.0, width: 18.0, height: 18.0))
-    }
-    items[.demoStudio]!.append(PeerInfoScreenDisclosureItem(
-        id: 0,
-        label: .text("Локально"),
-        text: "Demo Studio",
-        icon: demoStudioIcon,
-        action: {
-            interaction.openSettings(.demoStudio)
-        }
-    ))
-    
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     for section in SettingsSection.allCases {
         if let sectionItems = items[section], !sectionItems.isEmpty {

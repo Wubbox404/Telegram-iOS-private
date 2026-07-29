@@ -297,6 +297,8 @@ extension PeerInfoScreenNode {
             }
         case .demoStudio:
             push(demoStudioController(context: self.context))
+        case .demoGifts:
+            push(demoGiftsController(context: self.context))
         }
     }
 

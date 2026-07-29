@@ -189,6 +189,7 @@ enum PeerInfoSettingsSection {
     case stars
     case ton
     case demoStudio
+    case demoGifts
 }
 
 enum PeerInfoReportType {
@@ -4526,6 +4527,10 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.context.sharedContext.handleTextLinkAction(context: self.context, peerId: peer.id, navigateDisposable: self.resolveUrlDisposable, controller: controller, action: action, itemLink: item)
     }
     
+    func reloadDemoStudioPresentation() {
+        self.requestLayout(animated: true)
+    }
+
     private func requestLayout(animated: Bool = false) {
         self.headerNode.requestUpdateLayout?(animated)
     }
@@ -6429,6 +6434,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
     private let activeSessionsContextAndCount = Promise<(ActiveSessionsContext, Int, WebSessionsContext)?>(nil)
 
     private var tabBarItemDisposable: Disposable?
+    private var demoStudioObserver: NSObjectProtocol?
 
     var avatarPickerHolder: Any?
     
@@ -6844,6 +6850,17 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         })
 
         self.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: false), transition: .immediate)
+
+        self.demoStudioObserver = NotificationCenter.default.addObserver(
+            forName: demoStudioPresentationDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isNodeLoaded else {
+                return
+            }
+            self.controllerNode.reloadDemoStudioPresentation()
+        }
         
         if let sourceMessageId {
             let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
@@ -6868,6 +6885,9 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         self.presentationDataDisposable?.dispose()
         self.accountsAndPeersDisposable?.dispose()
         self.tabBarItemDisposable?.dispose()
+        if let demoStudioObserver = self.demoStudioObserver {
+            NotificationCenter.default.removeObserver(demoStudioObserver)
+        }
     }
     
     override public func loadDisplayNode() {

@@ -4,12 +4,19 @@ import Display
 import AccountContext
 import DemoStudioCore
 
+public let demoStudioPresentationDidChange = Notification.Name("org.telegram.DemoStudio.didChange")
+
 public func demoStudioController(context: AccountContext) -> ViewController {
     return DemoStudioController(context: context)
 }
 
-public func activateDemoStudio(accountPeerId: Int64) {
-    DemoStudioStore.shared.activate(scope: String(accountPeerId))
+public func demoGiftsController(context: AccountContext) -> ViewController {
+    return DemoGiftsController(context: context)
+}
+
+public func activateDemoStudio(context: AccountContext) {
+    DemoStudioStore.shared.activate(scope: String(context.account.peerId.toInt64()))
+    DemoStudioPostboxBridge.shared.activate(context: context)
 }
 
 public struct DemoOwnerProfilePresentation {
@@ -45,6 +52,10 @@ public func demoOwnerProfilePresentation() -> DemoOwnerProfilePresentation? {
 
 public func demoStarsBalancePresentation() -> Int64 {
     return DemoStudioStore.shared.document.starsBalance
+}
+
+public func demoOwnerGiftCountPresentation() -> Int {
+    return DemoStudioStore.shared.document.ownerProfile.gifts.filter(\.displayedOnProfile).count
 }
 
 final class DemoStudioController: DemoStudioTableController {
@@ -135,14 +146,14 @@ final class DemoStudioController: DemoStudioTableController {
         case .notice:
             let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
             cell.backgroundColor = self.presentationData.theme.list.itemBlocksBackgroundColor
-            cell.textLabel?.text = "Только локально"
+            cell.textLabel?.text = "Нативное демо"
             cell.textLabel?.textColor = self.presentationData.theme.list.itemAccentColor
             cell.textLabel?.font = UIFont.systemFont(ofSize: 16.0, weight: .semibold)
-            cell.detailTextLabel?.text = "Демо-профили, сообщения, звёзды и подарки сохраняются отдельно и никогда не отправляются в Telegram."
+            cell.detailTextLabel?.text = "Созданные здесь профили и переписки отображаются обычными экранами Telegram. Редактирование обеих сторон доступно только внутри Demo Studio."
             cell.detailTextLabel?.numberOfLines = 0
             cell.detailTextLabel?.textColor = self.presentationData.theme.list.itemSecondaryTextColor
             cell.selectionStyle = .none
-            cell.imageView?.image = UIImage(systemName: "lock.shield")
+            cell.imageView?.image = UIImage(systemName: "wand.and.stars")
             cell.imageView?.tintColor = self.presentationData.theme.list.itemAccentColor
             return cell
         case .content:

@@ -783,7 +783,10 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
 
             var attributes: [MessageAttribute] = []
             var flags = StoreMessageFlags()
-            flags.insert(.Unsent)
+            let isDemoStudioMessage = Namespaces.Peer.isDemoStudioUser(peerId)
+            if !isDemoStudioMessage {
+                flags.insert(.Unsent)
+            }
             
             var randomId: Int64 = 0
             arc4random_buf(&randomId, 8)
@@ -796,7 +799,7 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
             if case let .message(_, _, _, mediaReference, _, _, _, _, _, _) = message {
                 partialReference = mediaReference?.partial
             }
-            attributes.append(OutgoingMessageInfoAttribute(uniqueId: randomId, flags: infoFlags, acknowledged: false, correlationId: message.correlationId, bubbleUpEmojiOrStickersets: message.bubbleUpEmojiOrStickersets, partialReference: partialReference))
+            attributes.append(OutgoingMessageInfoAttribute(uniqueId: randomId, flags: infoFlags, acknowledged: isDemoStudioMessage, correlationId: message.correlationId, bubbleUpEmojiOrStickersets: message.bubbleUpEmojiOrStickersets, partialReference: partialReference))
             globallyUniqueIds.append(randomId)
             
             switch message {
