@@ -1,4 +1,6 @@
-name: Apply Native Demo Hotfix and Build
+name: Apply Native Demo Hotfix V2 - Quote Fix
+
+run-name: Native Hotfix V2 Quote Fix - ${{ github.run_number }}
 
 on:
   workflow_dispatch:
@@ -7,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: telegram-demo-native-hotfix-${{ github.ref }}
+  group: telegram-demo-native-hotfix-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,6 +19,9 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: Confirm workflow revision
+        run: echo "WORKFLOW_REVISION=native-hotfix-v2-quote-fix"
+
       - name: Check out Telegram
         uses: actions/checkout@v4
         with:
@@ -30,6 +35,7 @@ jobs:
           import base64
           import gzip
           import hashlib
+          import os
           import pathlib
 
           encoded = """
@@ -281,34 +287,37 @@ jobs:
           if actual != expected:
               raise SystemExit(f"Embedded patch checksum mismatch: {actual}")
 
-          path = pathlib.Path("/tmp/demo-studio-native-hotfix.patch")
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "demo-studio-native-hotfix.patch"
           path.write_bytes(patch)
           print(f"Verified embedded patch: {actual}")
           PY
 
-          if grep -Fq 'Synthetic peers have no MTProto history' \
+          if grep -Fq "Synthetic peers have no MTProto history" \
               submodules/TelegramUI/Sources/ChatHistoryViewForLocation.swift \
-            && grep -Fq 'updateLocalProfileGifts' \
+            && grep -Fq "updateLocalProfileGifts" \
               submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift \
-            && grep -Fq 'Demo Studio' \
-              'submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift'; then
+            && grep -Fq "Demo Studio" \
+              "submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift"; then
             echo "Native Demo Studio integration is already present."
             echo "applied=false" >> "$GITHUB_OUTPUT"
           else
-            git apply --check /tmp/demo-studio-native-hotfix.patch
-            git apply /tmp/demo-studio-native-hotfix.patch
+            git apply --check "$RUNNER_TEMP/demo-studio-native-hotfix.patch"
+            git apply "$RUNNER_TEMP/demo-studio-native-hotfix.patch"
             echo "applied=true" >> "$GITHUB_OUTPUT"
           fi
 
           git diff --check
-          grep -F 'trackHoles = !isDemoStudioPeer' \
+          grep -F "trackHoles = !isDemoStudioPeer" \
             submodules/TelegramUI/Sources/ChatHistoryViewForLocation.swift
-          grep -F 'updateLocalProfileGifts' \
+          grep -F "updateLocalProfileGifts" \
             submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift
-          grep -F 'Demo Studio' \
-            'submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift
-          ! grep -R -F 'ЛОКАЛЬНАЯ ИСТОРИЯ' \
-            submodules/TelegramUI/Components/Stars/StarsTransactionsScreen
+          grep -F "Demo Studio" \
+            "submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift"
+          if grep -R -Fq "ЛОКАЛЬНАЯ ИСТОРИЯ" \
+              submodules/TelegramUI/Components/Stars/StarsTransactionsScreen; then
+            echo "Separate local Stars history is still present." >&2
+            exit 1
+          fi
 
       - name: Commit the native integration
         if: steps.native-hotfix.outputs.applied == 'true'
@@ -340,7 +349,7 @@ jobs:
 
       - name: Parse every changed Swift source
         run: |
-          grep '^+++ b/.*\.swift$' /tmp/demo-studio-native-hotfix.patch |
+          grep '^+++ b/.*\.swift$' "$RUNNER_TEMP/demo-studio-native-hotfix.patch" |
             sed 's#^+++ b/##' |
             sort -u |
             while IFS= read -r source; do
