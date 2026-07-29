@@ -91,7 +91,16 @@ func chatHistoryViewForLocation(
             ignoreRelatedChats = false
         }
         
-        let trackHoles = true
+        let isDemoStudioPeer: Bool
+        if case let .peer(peerId) = chatLocation {
+            isDemoStudioPeer = Namespaces.Peer.isDemoStudioUser(peerId)
+        } else {
+            isDemoStudioPeer = false
+        }
+        // Synthetic peers have no MTProto history. Tracking cloud holes for
+        // them leaves the native chat in a permanent loading state and makes
+        // the account state manager repeatedly attempt impossible requests.
+        let trackHoles = !isDemoStudioPeer
         
         switch location.content {
             case let .Initial(count):
@@ -115,7 +124,9 @@ func chatHistoryViewForLocation(
                 }
             
                 let isPossibleIntroLoaded: Signal<Bool, NoError>
-                if case let .peer(id) = chatLocation, id.namespace == Namespaces.Peer.CloudUser {
+                if case let .peer(id) = chatLocation,
+                   id.namespace == Namespaces.Peer.CloudUser,
+                   !isDemoStudioPeer {
                     isPossibleIntroLoaded = context.engine.data.subscribe(
                         TelegramEngine.EngineData.Item.Peer.BusinessIntro(id: id)
                     )

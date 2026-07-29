@@ -220,7 +220,12 @@ func managedMessageHistoryHoles(accountPeerId: PeerId, network: Network, postbox
             postbox: postbox,
             network: network,
             entries: postbox.messageHistoryHolesView() |> map { view in
-                return view.entries
+                return Set(view.entries.filter { entry in
+                    switch entry.hole {
+                    case let .peer(hole):
+                        return !Namespaces.Peer.isDemoStudioUser(hole.peerId)
+                    }
+                })
             }
         )
     })

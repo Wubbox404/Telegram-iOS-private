@@ -8,7 +8,7 @@ final class DemoChatsController: DemoStudioTableController {
     private var observer: NSObjectProtocol?
 
     init(context: AccountContext) {
-        super.init(context: context, title: "Локальные чаты", style: .plain)
+        super.init(context: context, title: "Чаты", style: .plain)
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: "Добавить",
             style: .plain,

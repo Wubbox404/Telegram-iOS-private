@@ -15,6 +15,7 @@ final class DemoStudioPostboxBridge {
     private var context: AccountContext?
     private var observer: NSObjectProtocol?
     private let syncDisposable = MetaDisposable()
+    private var lastSynchronizedDocument: DemoStudioDocument?
 
     private init() {
     }
@@ -28,6 +29,7 @@ final class DemoStudioPostboxBridge {
 
     func activate(context: AccountContext) {
         self.context = context
+        self.lastSynchronizedDocument = nil
         if let observer {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -53,6 +55,10 @@ final class DemoStudioPostboxBridge {
             return
         }
         let document = DemoStudioStore.shared.document
+        if self.lastSynchronizedDocument == document {
+            return
+        }
+        self.lastSynchronizedDocument = document
         let store = DemoStudioStore.shared
         let accountPeerId = context.account.peerId
 
@@ -128,6 +134,42 @@ final class DemoStudioPostboxBridge {
                 guard let peerId = profilePeerIds[profile.id] else {
                     continue
                 }
+                updateLocalProfileGifts(
+                    peerId: peerId,
+                    gifts: Self.makeProfileGifts(
+                        profile.gifts,
+                        profilePeerIds: profilePeerIds,
+                        transaction: transaction,
+                        store: store
+                    )
+                )
+            }
+            updateLocalProfileGifts(
+                peerId: accountPeerId,
+                gifts: Self.makeProfileGifts(
+                    document.ownerProfile.gifts,
+                    profilePeerIds: profilePeerIds,
+                    transaction: transaction,
+                    store: store
+                )
+            )
+            if !document.ownerProfile.gifts.isEmpty {
+                transaction.updatePeerCachedData(peerIds: Set([accountPeerId]), update: { _, current in
+                    guard let data = current as? CachedUserData else {
+                        return current
+                    }
+                    let visibleGiftCount = max(
+                        data.starGiftsCount ?? 0,
+                        Int32(clamping: document.ownerProfile.gifts.count)
+                    )
+                    return data.withUpdatedStarGiftsCount(visibleGiftCount)
+                })
+            }
+
+            for profile in document.profiles {
+                guard let peerId = profilePeerIds[profile.id] else {
+                    continue
+                }
                 guard let chat = document.chats.first(where: { $0.profileId == profile.id }) else {
                     transaction.updatePeerChatListInclusion(peerId, inclusion: .notIncluded)
                     continue
@@ -137,14 +179,29 @@ final class DemoStudioPostboxBridge {
                 for message in chat.messages {
                     let id = MessageId(
                         peerId: peerId,
-                        namespace: Namespaces.Message.Cloud,
+                        namespace: Namespaces.Message.Local,
                         id: Self.messageId(message.id)
                     )
                     desiredMessages[id] = message
                 }
-                var obsoleteMessageIds: [MessageId] = []
+                // Older Demo Studio builds materialized these records in the
+                // cloud namespace. That makes ChatController wait for a server
+                // history which can never exist for a synthetic peer.
+                var legacyCloudMessageIds: [MessageId] = []
                 transaction.withAllMessages(peerId: peerId, namespace: Namespaces.Message.Cloud) { message in
-                    if desiredMessages[message.id] == nil {
+                    legacyCloudMessageIds.append(message.id)
+                    return true
+                }
+                if !legacyCloudMessageIds.isEmpty {
+                    transaction.deleteMessages(legacyCloudMessageIds, forEachMedia: nil)
+                }
+
+                var obsoleteMessageIds: [MessageId] = []
+                transaction.withAllMessages(peerId: peerId, namespace: Namespaces.Message.Local) { message in
+                    // Demo-authored records use negative ids. Telegram's own
+                    // outgoing local messages use its normal positive id
+                    // allocator and must survive subsequent Studio edits.
+                    if message.id.id < 0 && desiredMessages[message.id] == nil {
                         obsoleteMessageIds.append(message.id)
                     }
                     return true
@@ -287,6 +344,105 @@ final class DemoStudioPostboxBridge {
             ],
             alternativeRepresentations: []
         )
+    }
+
+    private static func makeProfileGifts(
+        _ gifts: [DemoGift],
+        profilePeerIds: [UUID: PeerId],
+        transaction: Transaction,
+        store: DemoStudioStore
+    ) -> [ProfileGiftsContext.State.StarGift] {
+        return gifts.map { gift in
+            let fromPeer: EnginePeer?
+            if let senderProfileId = gift.senderProfileId,
+               let senderPeerId = profilePeerIds[senderProfileId],
+               let senderPeer = transaction.getPeer(senderPeerId) {
+                fromPeer = EnginePeer(senderPeer)
+            } else {
+                fromPeer = nil
+            }
+
+            let previewData = store.assetURL(fileName: gift.imageFileName).flatMap {
+                try? Data(contentsOf: $0)
+            }
+            let previewRepresentations: [TelegramMediaImageRepresentation]
+            if let previewData {
+                previewRepresentations = [
+                    TelegramMediaImageRepresentation(
+                        dimensions: PixelDimensions(width: 512, height: 512),
+                        resource: EmptyMediaResource(),
+                        progressiveSizes: [],
+                        immediateThumbnailData: previewData,
+                        hasVideo: false,
+                        isPersonal: false
+                    )
+                ]
+            } else {
+                previewRepresentations = []
+            }
+            let file = TelegramMediaFile(
+                fileId: MediaId(
+                    namespace: Namespaces.Media.LocalFile,
+                    id: Self.positiveStableId(gift.id)
+                ),
+                partialReference: nil,
+                resource: EmptyMediaResource(),
+                previewRepresentations: previewRepresentations,
+                videoThumbnails: [],
+                immediateThumbnailData: previewData,
+                mimeType: "application/x-tgsticker",
+                size: nil,
+                attributes: [
+                    .FileName(fileName: "gift.tgs"),
+                    .Sticker(displayText: "🎁", packReference: nil, maskData: nil)
+                ],
+                alternativeRepresentations: []
+            )
+            let genericGift = StarGift.Gift(
+                id: gift.telegramGiftId ?? Self.positiveStableId(gift.id),
+                title: gift.title.isEmpty ? "Gift" : gift.title,
+                file: file,
+                price: 0,
+                convertStars: 0,
+                availability: nil,
+                soldOut: nil,
+                flags: [],
+                upgradeStars: nil,
+                releasedBy: nil,
+                perUserLimit: nil,
+                lockedUntilDate: nil,
+                auctionSlug: nil,
+                auctionGiftsPerRound: nil,
+                auctionStartDate: nil,
+                upgradeVariantsCount: nil,
+                background: nil
+            )
+            return ProfileGiftsContext.State.StarGift(
+                gift: .generic(genericGift),
+                reference: nil,
+                fromPeer: fromPeer,
+                date: Int32(clamping: Int64(gift.receivedAt.timeIntervalSince1970)),
+                text: nil,
+                entities: nil,
+                nameHidden: fromPeer == nil,
+                savedToProfile: gift.displayedOnProfile,
+                pinnedToTop: false,
+                convertStars: nil,
+                canUpgrade: false,
+                canExportDate: nil,
+                upgradeStars: nil,
+                transferStars: nil,
+                canTransferDate: nil,
+                canResaleDate: nil,
+                collectionIds: nil,
+                prepaidUpgradeHash: nil,
+                upgradeSeparate: false,
+                dropOriginalDetailsStars: nil,
+                number: gift.number.map { Int32(clamping: $0) },
+                isRefunded: false,
+                canCraftAt: nil
+            )
+        }
     }
 
     private static func makeMessage(
@@ -590,7 +746,7 @@ final class DemoStudioPostboxBridge {
     }
 
     private static func messageId(_ uuid: UUID) -> Int32 {
-        return Int32(1 + positiveStableId(uuid) % Int64(Int32.max - 1))
+        return -Int32(1 + positiveStableId(uuid) % Int64(Int32.max - 1))
     }
 
     private static func stableUInt32(_ uuid: UUID) -> UInt32 {

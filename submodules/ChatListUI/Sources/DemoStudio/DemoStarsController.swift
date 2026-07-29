@@ -52,13 +52,10 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        return section == 0 ? "Локальный баланс" : "Локальная история"
+        return section == 0 ? "Баланс" : "История операций"
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        if section == 0 {
-            return "Настоящий баланс Telegram Stars не изменяется."
-        }
         return nil
     }
 
@@ -324,7 +321,7 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
     ) {
         picker.dismiss(animated: true)
         guard let transactionId = self.iconTransactionId,
-              let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage,
+              let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
               let data = image.jpegData(compressionQuality: 0.86),
               let fileName = self.store.writeAsset(data: data, fileExtension: "jpg") else {
             self.iconTransactionId = nil

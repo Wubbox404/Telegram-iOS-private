@@ -18,6 +18,117 @@ import PhotoResources
 import StarsAvatarComponent
 import GiftAnimationComponent
 import TelegramStringFormatting
+import DemoStudioCore
+
+private extension DemoStarsTransaction {
+    func asTelegramTransaction() -> StarsContext.State.Transaction {
+        var flags: StarsContext.State.Transaction.Flags = [.isLocal]
+        if self.isPending == true {
+            flags.insert(.isPending)
+        }
+        if self.isFailed == true {
+            flags.insert(.isFailed)
+        }
+        switch self.kind {
+        case .some(.refund):
+            flags.insert(.isRefund)
+        case .some(.gift):
+            flags.insert(.isGift)
+        case .some(.reaction):
+            flags.insert(.isReaction)
+        case .some(.paidMessage):
+            flags.insert(.isPaidMessage)
+        case .some(.starGiftUpgrade):
+            flags.insert(.isStarGiftUpgrade)
+        case .some(.starGiftResale):
+            flags.insert(.isStarGiftResale)
+        case .some(.businessTransfer):
+            flags.insert(.isBusinessTransfer)
+        case .some(.postsSearch):
+            flags.insert(.isPostsSearch)
+        case .some(.auctionBid):
+            flags.insert(.isStarGiftAuctionBid)
+        case .some(.liveStreamPaidMessage):
+            flags.insert(.isLiveStreamPaidMessage)
+        default:
+            break
+        }
+
+        let peer: StarsContext.State.Transaction.Peer
+        switch self.kind {
+        case .some(.purchase):
+            peer = .appStore
+        case .some(.ads):
+            peer = .ads
+        case .some(.apiExtension):
+            peer = .apiLimitExtension
+        default:
+            peer = .unsupported
+        }
+
+        let photo: TelegramMediaWebFile?
+        if let url = DemoStudioStore.shared.assetURL(fileName: self.iconFileName),
+           let data = try? Data(contentsOf: url),
+           let image = UIImage(data: data) {
+            let dimensions = PixelDimensions(
+                width: Int32(clamping: Int(image.size.width * image.scale)),
+                height: Int32(clamping: Int(image.size.height * image.scale))
+            )
+            photo = TelegramMediaWebFile(
+                resource: LocalFileReferenceMediaResource(
+                    localFilePath: url.path,
+                    randomId: self.stableMediaId
+                ),
+                mimeType: "image/jpeg",
+                size: Int32(clamping: data.count),
+                attributes: [.ImageSize(size: dimensions)]
+            )
+        } else {
+            photo = nil
+        }
+
+        return StarsContext.State.Transaction(
+            flags: flags,
+            id: "demo:\(self.id.uuidString)",
+            count: CurrencyAmount(
+                amount: StarsAmount(value: self.signedAmount, nanos: 0),
+                currency: .stars
+            ),
+            date: Int32(clamping: Int64(self.date.timeIntervalSince1970)),
+            peer: peer,
+            title: self.title.isEmpty ? (self.kind?.title ?? "") : self.title,
+            description: self.peerName.isEmpty ? nil : self.peerName,
+            photo: photo,
+            transactionDate: nil,
+            transactionUrl: nil,
+            paidMessageId: nil,
+            giveawayMessageId: nil,
+            media: [],
+            subscriptionPeriod: self.kind == .subscription ? 30 * 24 * 60 * 60 : nil,
+            starGift: nil,
+            floodskipNumber: self.kind == .apiExtension ? 1 : nil,
+            starrefCommissionPermille: nil,
+            starrefPeerId: nil,
+            starrefAmount: nil,
+            paidMessageCount: self.kind == .paidMessage ? 1 : nil,
+            premiumGiftMonths: nil,
+            adsProceedsFromDate: nil,
+            adsProceedsToDate: nil
+        )
+    }
+
+    private var stableMediaId: Int64 {
+        var bytes = self.id.uuid
+        return withUnsafeBytes(of: &bytes) { buffer in
+            var hash: UInt64 = 14_695_981_039_346_656_037
+            for byte in buffer {
+                hash ^= UInt64(byte)
+                hash &*= 1_099_511_628_211
+            }
+            return Int64(bitPattern: hash)
+        }
+    }
+}
 
 private extension StarsContext.State.Transaction {
     var extendedId: String {
@@ -35,17 +146,23 @@ final class StarsTransactionsListPanelComponent: Component {
     let context: AccountContext
     let transactionsContext: StarsTransactionsContext
     let isAccount: Bool
+    let mode: StarsTransactionsContext.Mode
+    let demoTransactions: [DemoStarsTransaction]
     let action: (StarsContext.State.Transaction) -> Void
 
     init(
         context: AccountContext,
         transactionsContext: StarsTransactionsContext,
         isAccount: Bool,
+        mode: StarsTransactionsContext.Mode = .all,
+        demoTransactions: [DemoStarsTransaction] = [],
         action: @escaping (StarsContext.State.Transaction) -> Void
     ) {
         self.context = context
         self.transactionsContext = transactionsContext
         self.isAccount = isAccount
+        self.mode = mode
+        self.demoTransactions = demoTransactions
         self.action = action
     }
     
@@ -54,6 +171,15 @@ final class StarsTransactionsListPanelComponent: Component {
             return false
         }
         if lhs.isAccount != rhs.isAccount {
+            return false
+        }
+        switch (lhs.mode, rhs.mode) {
+        case (.all, .all), (.incoming, .incoming), (.outgoing, .outgoing):
+            break
+        default:
+            return false
+        }
+        if lhs.demoTransactions != rhs.demoTransactions {
             return false
         }
         return true
@@ -129,6 +255,7 @@ final class StarsTransactionsListPanelComponent: Component {
         private var itemLayout: ItemLayout?
         
         private var items: [StarsContext.State.Transaction] = []
+        private var serverItems: [StarsContext.State.Transaction] = []
         private var itemsDisposable: Disposable?
         private var currentLoadMoreId: String?
         
@@ -434,8 +561,13 @@ final class StarsTransactionsListPanelComponent: Component {
                             itemSubtitle = nil
                         }
                     case .unsupported:
-                        itemTitle = environment.strings.Stars_Intro_Transaction_Unsupported_Title
-                        itemSubtitle = nil
+                        if item.id.hasPrefix("demo:") {
+                            itemTitle = item.title ?? environment.strings.Stars_Intro_Transaction_Unsupported_Title
+                            itemSubtitle = item.description
+                        } else {
+                            itemTitle = environment.strings.Stars_Intro_Transaction_Unsupported_Title
+                            itemSubtitle = nil
+                        }
                     }
                     
                     let itemLabel: NSAttributedString
@@ -592,6 +724,34 @@ final class StarsTransactionsListPanelComponent: Component {
         }
         
         private var isUpdating = false
+        private func rebuildItems(component: StarsTransactionsListPanelComponent) {
+            let demoItems = component.demoTransactions.compactMap { transaction -> StarsContext.State.Transaction? in
+                switch component.mode {
+                case .all:
+                    break
+                case .incoming:
+                    guard transaction.direction == .incoming else {
+                        return nil
+                    }
+                case .outgoing:
+                    guard transaction.direction == .outgoing else {
+                        return nil
+                    }
+                }
+                return transaction.asTelegramTransaction()
+            }
+
+            var existingIds = Set<String>()
+            var result: [StarsContext.State.Transaction] = []
+            for transaction in (self.serverItems + demoItems).sorted(by: { $0.date > $1.date }) {
+                let id = transaction.extendedId
+                if existingIds.insert(id).inserted {
+                    result.append(transaction)
+                }
+            }
+            self.items = result
+        }
+
         func update(component: StarsTransactionsListPanelComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<StarsTransactionsPanelEnvironment>, transition: ComponentTransition) -> CGSize {
             self.isUpdating = true
             defer {
@@ -619,7 +779,8 @@ final class StarsTransactionsListPanelComponent: Component {
                         }
                     }
                     
-                    self.items = filteredItems
+                    self.serverItems = filteredItems
+                    self.rebuildItems(component: self.component ?? component)
                     if !status.isLoading {
                         self.currentLoadMoreId = nil
                     }
@@ -628,6 +789,8 @@ final class StarsTransactionsListPanelComponent: Component {
                     }
                 })
             }
+
+            self.rebuildItems(component: component)
             
             let environment = environment[StarsTransactionsPanelEnvironment.self].value
             self.environment = environment

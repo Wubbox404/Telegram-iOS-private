@@ -75,7 +75,7 @@ final class DemoOwnerProfileController: DemoStudioTableController, UIImagePicker
         }
         switch section {
         case .enabled:
-            return "Локальная подмена"
+            return "Профиль"
         case .fields:
             return "Видимые поля"
         case .gifts:
@@ -230,7 +230,7 @@ final class DemoOwnerProfileController: DemoStudioTableController, UIImagePicker
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
     ) {
         picker.dismiss(animated: true)
-        guard let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage,
+        guard let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
               let data = image.jpegData(compressionQuality: 0.88),
               let fileName = self.store.writeAsset(data: data, fileExtension: "jpg") else {
             return

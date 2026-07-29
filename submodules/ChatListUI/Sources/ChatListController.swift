@@ -239,7 +239,6 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     let globalControlPanelsContext: GlobalControlPanelsContext
     private(set) var globalControlPanelsContextState: GlobalControlPanelsContext.State?
     private var globalControlPanelsContextStateDisposable: Disposable?
-    private var demoStudioObserver: NSObjectProtocol?
     
     public override func updateNavigationCustomData(_ data: Any?, progress: CGFloat, transition: ContainedViewLayoutTransition) {
         if self.isNodeLoaded {
@@ -813,9 +812,6 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         self.preloadStorySubscriptionsDisposable?.dispose()
         self.storyProgressDisposable?.dispose()
         self.storiesPostingAvailabilityDisposable?.dispose()
-        if let demoStudioObserver = self.demoStudioObserver {
-            NotificationCenter.default.removeObserver(demoStudioObserver)
-        }
         self.sharedOpenStoryProgressDisposable.dispose()
         for (_, disposable) in self.preloadStoryResourceDisposables {
             disposable.dispose()
@@ -1350,21 +1346,6 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
         }
 
-        self.chatListDisplayNode.mainContainerNode.demoChatSelected = { [weak self] chatId in
-            guard let self else {
-                return
-            }
-            self.push(DemoChatController(context: self.context, chatId: chatId))
-        }
-
-        self.demoStudioObserver = NotificationCenter.default.addObserver(
-            forName: .demoStudioDidChange,
-            object: DemoStudioStore.shared,
-            queue: .main
-        ) { [weak self] _ in
-            self?.chatListDisplayNode.mainContainerNode.reloadDemoStudioItems()
-        }
-        
         self.chatListDisplayNode.mainContainerNode.toggleArchivedFolderHiddenByDefault = { [weak self] in
             guard let strongSelf = self else {
                 return

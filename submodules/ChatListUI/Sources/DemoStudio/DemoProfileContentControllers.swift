@@ -81,7 +81,7 @@ class DemoProfileContentController: DemoStudioTableController, UIImagePickerCont
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
     ) {
         picker.dismiss(animated: true)
-        guard let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage,
+        guard let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
               let data = image.jpegData(compressionQuality: 0.88) else {
             self.mediaCompletion?(nil)
             self.mediaCompletion = nil
@@ -355,7 +355,7 @@ final class DemoProfileGiftsController: DemoProfileContentController {
         let gift = gifts[indexPath.row]
         return self.configuredCell(
             title: gift.title,
-            subtitle: gift.slug.map { "t.me/nft/\($0)" } ?? "Локальный подарок",
+            subtitle: gift.slug.map { "t.me/nft/\($0)" } ?? "Подарок",
             symbol: "gift.fill",
             color: .systemPink,
             accessory: .none

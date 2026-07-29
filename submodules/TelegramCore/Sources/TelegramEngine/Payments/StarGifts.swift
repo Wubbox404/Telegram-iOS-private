@@ -1865,6 +1865,27 @@ func giftsEntryId(peerId: EnginePeer.Id, collectionId: Int32?) -> ItemCacheEntry
     return ItemCacheEntryId(collectionId: Namespaces.CachedItemCollection.cachedProfileGifts, key: cacheKey)
 }
 
+private let localProfileGiftsValue = Atomic<[EnginePeer.Id: [ProfileGiftsContext.State.StarGift]]>(value: [:])
+private let localProfileGiftsPromise = ValuePromise<[EnginePeer.Id: [ProfileGiftsContext.State.StarGift]]>(
+    [:],
+    ignoreRepeated: true
+)
+
+/// Feeds local additions into the ordinary ProfileGiftsContext. They are
+/// merged with server gifts for a real account and are the complete source
+/// for a synthetic Demo Studio peer.
+public func updateLocalProfileGifts(
+    peerId: EnginePeer.Id,
+    gifts: [ProfileGiftsContext.State.StarGift]
+) {
+    let value = localProfileGiftsValue.modify { current in
+        var current = current
+        current[peerId] = gifts
+        return current
+    }
+    localProfileGiftsPromise.set(value)
+}
+
 private final class ProfileGiftsContextImpl {
     private let queue: Queue
     private let account: Account
@@ -1874,6 +1895,7 @@ private final class ProfileGiftsContextImpl {
     private let disposable = MetaDisposable()
     private let cacheDisposable = MetaDisposable()
     private let actionDisposable = MetaDisposable()
+    private let localGiftsDisposable = MetaDisposable()
     
     private var sorting: ProfileGiftsContext.Sorting
     private var filter: ProfileGiftsContext.Filters
@@ -1888,6 +1910,7 @@ private final class ProfileGiftsContextImpl {
     private var filteredDataState: ProfileGiftsContext.State.DataState = .ready(canLoadMore: true, nextOffset: nil)
     
     private var notificationsEnabled: Bool?
+    private var localGifts: [ProfileGiftsContext.State.StarGift] = []
     
     var _state: ProfileGiftsContext.State?
     private let stateValue = Promise<ProfileGiftsContext.State>()
@@ -1911,6 +1934,19 @@ private final class ProfileGiftsContextImpl {
         self.sorting = sorting
         self.filter = filter
         self.limit = limit
+
+        self.localGiftsDisposable.set((
+            localProfileGiftsPromise.get()
+            |> map { $0[peerId] ?? [] }
+            |> distinctUntilChanged
+            |> deliverOn(queue)
+        ).start(next: { [weak self] gifts in
+            guard let self else {
+                return
+            }
+            self.localGifts = gifts
+            self.pushState()
+        }))
         
         self.loadMore()
     }
@@ -1919,6 +1955,7 @@ private final class ProfileGiftsContextImpl {
         self.disposable.dispose()
         self.cacheDisposable.dispose()
         self.actionDisposable.dispose()
+        self.localGiftsDisposable.dispose()
     }
     
     func reload() {
@@ -1950,6 +1987,15 @@ private final class ProfileGiftsContextImpl {
         guard case let .ready(true, initialNextOffset) = dataState else {
             return
         }
+
+        if Namespaces.Peer.isDemoStudioUser(peerId) {
+            self.gifts = []
+            self.count = 0
+            self.dataState = .ready(canLoadMore: false, nextOffset: nil)
+            self.pushState()
+            return
+        }
+
         if !isFiltered || isUniqueOnlyFilter || isPeerColorFilter, self.gifts.isEmpty, initialNextOffset == nil, !reload {
             self.cacheDisposable.set((self.account.postbox.transaction { transaction -> CachedProfileGifts? in
                 let cachedGifts = transaction.retrieveItemCacheEntry(id: giftsEntryId(peerId: peerId, collectionId: collectionId))?.get(CachedProfileGifts.self)
@@ -2636,14 +2682,60 @@ private final class ProfileGiftsContextImpl {
     private func pushState() {
         let useMainData = (self.filter == .All && self.sorting == .date) || self.filteredCount == nil
         
-        let effectiveGifts = useMainData ? self.gifts : self.filteredGifts
-        let effectiveCount = useMainData ? self.count : self.filteredCount
+        var effectiveLocalGifts = self.localGifts.filter { gift in
+            if self.collectionId != nil {
+                return false
+            }
+            let matchesType: Bool
+            switch gift.gift {
+            case let .generic(genericGift):
+                if genericGift.availability == nil {
+                    matchesType = self.filter.contains(.unlimited)
+                } else if genericGift.upgradeStars != nil {
+                    matchesType = self.filter.contains(.limitedUpgradable)
+                } else {
+                    matchesType = self.filter.contains(.limitedNonUpgradable)
+                }
+            case .unique:
+                matchesType = self.filter.contains(.unique)
+            }
+            let matchesVisibility = gift.savedToProfile
+                ? self.filter.contains(.displayed)
+                : self.filter.contains(.hidden)
+            return matchesType && matchesVisibility
+        }
+        if self.sorting == .value {
+            effectiveLocalGifts.sort { lhs, rhs in
+                let lhsValue: Int64
+                let rhsValue: Int64
+                switch lhs.gift {
+                case let .generic(gift):
+                    lhsValue = gift.price
+                case let .unique(gift):
+                    lhsValue = gift.valueAmount ?? 0
+                }
+                switch rhs.gift {
+                case let .generic(gift):
+                    rhsValue = gift.price
+                case let .unique(gift):
+                    rhsValue = gift.valueAmount ?? 0
+                }
+                return lhsValue > rhsValue
+            }
+        } else {
+            effectiveLocalGifts.sort { $0.date > $1.date }
+        }
+
+        let baseGifts = useMainData ? self.gifts : self.filteredGifts
+        let effectiveGifts = effectiveLocalGifts + baseGifts
+        let baseCount = useMainData ? self.count : self.filteredCount
+        let effectiveCount = (baseCount ?? Int32(clamping: baseGifts.count)) + Int32(clamping: effectiveLocalGifts.count)
         let effectiveDataState = useMainData ? self.dataState : self.filteredDataState
         
         let state = ProfileGiftsContext.State(
             filter: self.filter,
             sorting: self.sorting,
-            gifts: self.gifts,
+            gifts: self.localGifts + self.gifts,
             filteredGifts: effectiveGifts,
             count: effectiveCount,
             dataState: effectiveDataState,

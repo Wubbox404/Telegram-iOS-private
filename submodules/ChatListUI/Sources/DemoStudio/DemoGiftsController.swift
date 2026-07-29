@@ -13,7 +13,7 @@ final class DemoGiftsController: DemoStudioTableController {
     private var observer: NSObjectProtocol?
 
     init(context: AccountContext) {
-        super.init(context: context, title: "Локальные подарки")
+        super.init(context: context, title: "Подарки")
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
             title: "Добавить",
             style: .plain,
@@ -59,7 +59,7 @@ final class DemoGiftsController: DemoStudioTableController {
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        return section == Section.gifts.rawValue ? "В моём локальном профиле" : nil
+        return section == Section.gifts.rawValue ? "В моём профиле" : nil
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -72,7 +72,7 @@ final class DemoGiftsController: DemoStudioTableController {
             cell.textLabel?.text = "Как добавить настоящий Telegram Gift"
             cell.textLabel?.textColor = self.presentationData.theme.list.itemAccentColor
             cell.textLabel?.font = UIFont.systemFont(ofSize: 16.0, weight: .semibold)
-            cell.detailTextLabel?.text = "Откройте любой уникальный подарок в Telegram, нажмите ⋯ → «ДЕМО: Подарил мне» и выберите локального собеседника."
+            cell.detailTextLabel?.text = "Откройте любой уникальный подарок в Telegram, нажмите ⋯ → «ДЕМО: Подарил мне» и выберите собеседника."
             cell.detailTextLabel?.numberOfLines = 0
             cell.detailTextLabel?.textColor = self.presentationData.theme.list.itemSecondaryTextColor
             cell.imageView?.image = UIImage(systemName: "gift.fill")
@@ -188,7 +188,7 @@ final class DemoGiftsController: DemoStudioTableController {
         guard !profiles.isEmpty else {
             let alert = UIAlertController(
                 title: "Нет профилей",
-                message: "Сначала создайте локального собеседника.",
+                message: "Сначала создайте собеседника.",
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "OK", style: .default))

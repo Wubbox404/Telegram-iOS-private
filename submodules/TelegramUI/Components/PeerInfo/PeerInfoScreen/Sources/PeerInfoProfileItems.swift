@@ -90,7 +90,6 @@ func infoItems(
         let ItemAbout = 3003
         let ItemNote = 3004
         let ItemAppFooter = 3005
-        let ItemDemoGifts = 3006
         let ItemAffiliate = 4000
         let ItemAffiliateInfo = 4001
         let ItemBusinessHours = 5000
@@ -417,19 +416,6 @@ func infoItems(
             }
         }
 
-        if isMyProfile {
-            let giftCount = demoOwnerGiftCountPresentation()
-            items[currentPeerInfoSection]!.append(PeerInfoScreenDisclosureItem(
-                id: ItemDemoGifts,
-                label: .text("\(giftCount)"),
-                text: "Локальные подарки",
-                icon: UIImage(systemName: "gift.fill"),
-                action: {
-                    interaction.openSettings(.demoGifts)
-                }
-            ))
-        }
-        
         if !isMyProfile {
             if !data.isContact, user.botInfo == nil {
                 items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemAddToContacts, text: presentationData.strings.PeerInfo_AddToContacts, action: {

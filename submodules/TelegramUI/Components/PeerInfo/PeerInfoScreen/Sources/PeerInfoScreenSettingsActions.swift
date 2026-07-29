@@ -295,10 +295,6 @@ extension PeerInfoScreenNode {
             if let tonContext = self.controller?.tonContext {
                 push(self.context.sharedContext.makeStarsTransactionsScreen(context: self.context, starsContext: tonContext))
             }
-        case .demoStudio:
-            push(demoStudioController(context: self.context))
-        case .demoGifts:
-            push(demoGiftsController(context: self.context))
         }
     }
 

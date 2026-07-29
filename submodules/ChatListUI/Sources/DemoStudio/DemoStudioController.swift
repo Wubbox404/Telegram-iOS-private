@@ -126,7 +126,7 @@ final class DemoStudioController: DemoStudioTableController {
         case .notice:
             return nil
         case .content:
-            return "Локальные профили и переписки"
+            return "Профили и переписки"
         case .economy:
             return "Звёзды и подарки"
         case .owner:
@@ -166,7 +166,7 @@ final class DemoStudioController: DemoStudioTableController {
                 )
             } else {
                 return self.configuredCell(
-                    title: "Локальные чаты",
+                    title: "Чаты",
                     detail: "\(document.chats.count)",
                     symbol: "bubble.left.and.bubble.right.fill",
                     color: .systemBlue
@@ -183,7 +183,7 @@ final class DemoStudioController: DemoStudioTableController {
             } else {
                 let giftCount = document.profiles.reduce(0) { $0 + $1.gifts.count } + document.ownerProfile.gifts.count
                 return self.configuredCell(
-                    title: "Локальные подарки",
+                    title: "Подарки",
                     detail: "\(giftCount)",
                     symbol: "gift.fill",
                     color: .systemPink
@@ -192,7 +192,7 @@ final class DemoStudioController: DemoStudioTableController {
         case .owner:
             return self.configuredCell(
                 title: "Визуальный профиль и номер",
-                subtitle: document.ownerProfile.isEnabled ? "Локальная подмена включена" : "Используется настоящий профиль",
+                subtitle: document.ownerProfile.isEnabled ? "Визуальная подмена включена" : "Используется настоящий профиль",
                 symbol: "person.crop.circle.fill",
                 color: .systemRed
             )

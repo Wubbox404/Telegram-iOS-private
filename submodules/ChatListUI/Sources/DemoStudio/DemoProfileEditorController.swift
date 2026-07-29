@@ -80,7 +80,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
         }
         switch section {
         case .identity:
-            return "Локальный username может совпадать с существующим Telegram username."
+            return "Username может совпадать с существующим Telegram username."
         case .appearance:
             return "Уровень и точные значения рейтинга записываются в нативный CachedUserData профиля."
         default:
@@ -399,7 +399,7 @@ final class DemoProfileEditorController: DemoStudioTableController, UIImagePicke
         didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
     ) {
         picker.dismiss(animated: true)
-        guard let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage,
+        guard let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
               let data = image.jpegData(compressionQuality: 0.88),
               let fileName = self.store.writeAsset(data: data, fileExtension: "jpg", ownerId: self.profile.id) else {
             return

@@ -116,7 +116,6 @@ final class StarsTransactionsScreenComponent: Component {
         private let earnStarsSection = ComponentView<Empty>()
         
         private let subscriptionsView = ComponentView<Empty>()
-        private let localTransactionsView = ComponentView<Empty>()
         
         private let topBalanceTitleView = ComponentView<Empty>()
         private let topBalanceValueView = ComponentView<Empty>()
@@ -1077,148 +1076,12 @@ final class StarsTransactionsScreenComponent: Component {
                 contentHeight += 44.0
             }
 
-            let localTransactions: [DemoStarsTransaction]
-            if component.starsContext.ton {
-                localTransactions = []
-            } else {
-                localTransactions = DemoStudioStore.shared.document.starsTransactions.sorted {
-                    $0.date > $1.date
-                }
-            }
-            if !localTransactions.isEmpty {
-                var localTransactionItems: [AnyComponentWithIdentity<Empty>] = []
-                for transaction in localTransactions {
-                    let isIncoming = transaction.direction == .incoming
-                    let transactionIcon: UIImage
-                    if let url = DemoStudioStore.shared.assetURL(fileName: transaction.iconFileName),
-                       let image = UIImage(contentsOfFile: url.path) {
-                        transactionIcon = image
-                    } else {
-                        transactionIcon = UIImage(systemName: "star.fill")!
-                    }
-                    let amountColor = isIncoming
-                        ? UIColor.systemGreen
-                        : environment.theme.list.itemDestructiveColor
-                    let amountText = "\(isIncoming ? "+" : "−")\(transaction.amount) ⭐️"
-                    let statusText: String?
-                    if transaction.isFailed == true {
-                        statusText = "Ошибка"
-                    } else if transaction.isPending == true {
-                        statusText = "В обработке"
-                    } else {
-                        statusText = nil
-                    }
-                    let detailText = [
-                        transaction.kind?.title,
-                        transaction.peerName,
-                        statusText,
-                        Self.demoTransactionDateFormatter.string(from: transaction.date)
-                    ].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " • ")
-                    let title = transaction.title.isEmpty
-                        ? (isIncoming ? "Зачисление звёзд" : "Списание звёзд")
-                        : transaction.title
-
-                    localTransactionItems.append(AnyComponentWithIdentity(
-                        id: transaction.id,
-                        component: AnyComponent(ListActionItemComponent(
-                            theme: environment.theme,
-                            style: .glass,
-                            title: AnyComponent(VStack([
-                                AnyComponentWithIdentity(
-                                    id: "title",
-                                    component: AnyComponent(Text(
-                                        text: title,
-                                        font: Font.semibold(17.0),
-                                        color: environment.theme.list.itemPrimaryTextColor
-                                    ))
-                                ),
-                                AnyComponentWithIdentity(
-                                    id: "detail",
-                                    component: AnyComponent(Text(
-                                        text: detailText,
-                                        font: Font.regular(14.0),
-                                        color: environment.theme.list.itemSecondaryTextColor
-                                    ))
-                                )
-                            ], alignment: .left, spacing: 2.0)),
-                            contentInsets: UIEdgeInsets(top: 10.0, left: 0.0, bottom: 10.0, right: 0.0),
-                            leftIcon: .custom(
-                                AnyComponentWithIdentity(
-                                    id: "star",
-                                    component: AnyComponent(Image(
-                                        image: transactionIcon,
-                                        tintColor: transaction.iconFileName == nil ? .systemOrange : nil,
-                                        size: CGSize(width: 30.0, height: 30.0)
-                                    ))
-                                ),
-                                false
-                            ),
-                            icon: nil,
-                            accessory: .custom(ListActionItemComponent.CustomAccessory(
-                                component: AnyComponentWithIdentity(
-                                    id: "amount",
-                                    component: AnyComponent(Text(
-                                        text: amountText,
-                                        font: Font.semibold(17.0),
-                                        color: amountColor
-                                    ))
-                                ),
-                                insets: UIEdgeInsets(top: 0.0, left: 8.0, bottom: 0.0, right: 16.0)
-                            )),
-                            action: { _ in
-                            }
-                        ))
-                    ))
-                }
-
-                let localTransactionsSize = self.localTransactionsView.update(
-                    transition: transition,
-                    component: AnyComponent(ListSectionComponent(
-                        theme: environment.theme,
-                        style: .glass,
-                        header: AnyComponent(MultilineTextComponent(
-                            text: .plain(NSAttributedString(
-                                string: "ЛОКАЛЬНАЯ ИСТОРИЯ",
-                                font: Font.regular(presentationData.listsFontSize.itemListBaseHeaderFontSize),
-                                textColor: environment.theme.list.freeTextColor
-                            )),
-                            maximumNumberOfLines: 1
-                        )),
-                        footer: AnyComponent(MultilineTextComponent(
-                            text: .plain(NSAttributedString(
-                                string: "Эти операции существуют только в Demo Studio.",
-                                font: Font.regular(13.0),
-                                textColor: environment.theme.list.freeTextColor
-                            )),
-                            maximumNumberOfLines: 0
-                        )),
-                        items: localTransactionItems
-                    )),
-                    environment: {},
-                    containerSize: CGSize(width: availableSize.width - sideInsets, height: availableSize.height)
-                )
-                let localTransactionsFrame = CGRect(
-                    origin: CGPoint(
-                        x: floorToScreenPixels((availableSize.width - localTransactionsSize.width) / 2.0),
-                        y: contentHeight
-                    ),
-                    size: localTransactionsSize
-                )
-                if let localTransactionsView = self.localTransactionsView.view {
-                    if localTransactionsView.superview == nil {
-                        self.scrollView.addSubview(localTransactionsView)
-                    }
-                    transition.setFrame(view: localTransactionsView, frame: localTransactionsFrame)
-                }
-                contentHeight += localTransactionsSize.height
-                contentHeight += 44.0
-            } else {
-                self.localTransactionsView.view?.removeFromSuperview()
-            }
-            
+            let demoTransactions = component.starsContext.ton
+                ? []
+                : DemoStudioStore.shared.document.starsTransactions
             let initialTransactions = self.starsState?.transactions ?? []
             var panelItems: [StarsTransactionsPanelContainerComponent.Item] = []
-            if !initialTransactions.isEmpty {
+            if !initialTransactions.isEmpty || !demoTransactions.isEmpty {
                 let allTransactionsContext: StarsTransactionsContext
                 if let current = self.allTransactionsContext {
                     allTransactionsContext = current
@@ -1250,6 +1113,8 @@ final class StarsTransactionsScreenComponent: Component {
                         context: component.context,
                         transactionsContext: allTransactionsContext,
                         isAccount: true,
+                        mode: .all,
+                        demoTransactions: demoTransactions,
                         action: { transaction in
                             component.openTransaction(transaction)
                         }
@@ -1263,6 +1128,8 @@ final class StarsTransactionsScreenComponent: Component {
                         context: component.context,
                         transactionsContext: incomingTransactionsContext,
                         isAccount: true,
+                        mode: .incoming,
+                        demoTransactions: demoTransactions,
                         action: { transaction in
                             component.openTransaction(transaction)
                         }
@@ -1276,6 +1143,8 @@ final class StarsTransactionsScreenComponent: Component {
                         context: component.context,
                         transactionsContext: outgoingTransactionsContext,
                         isAccount: true,
+                        mode: .outgoing,
+                        demoTransactions: demoTransactions,
                         action: { transaction in
                             component.openTransaction(transaction)
                         }
@@ -1354,12 +1223,6 @@ final class StarsTransactionsScreenComponent: Component {
             return availableSize
         }
 
-        private static let demoTransactionDateFormatter: DateFormatter = {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "ru_RU")
-            formatter.dateFormat = "d MMM, HH:mm"
-            return formatter
-        }()
     }
     
     func makeView() -> View {

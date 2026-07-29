@@ -188,8 +188,6 @@ enum PeerInfoSettingsSection {
     case premiumManagement
     case stars
     case ton
-    case demoStudio
-    case demoGifts
 }
 
 enum PeerInfoReportType {
