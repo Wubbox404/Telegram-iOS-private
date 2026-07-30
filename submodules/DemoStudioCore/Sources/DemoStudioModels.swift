@@ -117,6 +117,10 @@ public struct DemoStory: Codable, Equatable, Identifiable {
 public struct DemoGift: Codable, Equatable, Identifiable {
     public var id: UUID
     public var telegramGiftId: Int64?
+    /// JSON-encoded TelegramCore.StarGift. Keeping the native value means
+    /// models, patterns, backdrops and their media resources survive a local
+    /// Demo Studio round-trip without reimplementing Telegram's gift schema.
+    public var telegramGiftPayload: Data?
     public var slug: String?
     public var title: String
     public var number: Int64?
@@ -124,22 +128,22 @@ public struct DemoGift: Codable, Equatable, Identifiable {
     public var senderProfileId: UUID?
     public var receivedAt: Date
     public var displayedOnProfile: Bool
-    public var nativeUniqueGiftData: Data?
 
     public init(
         id: UUID = UUID(),
         telegramGiftId: Int64? = nil,
+        telegramGiftPayload: Data? = nil,
         slug: String? = nil,
         title: String,
         number: Int64? = nil,
         imageFileName: String? = nil,
         senderProfileId: UUID? = nil,
         receivedAt: Date = Date(),
-        displayedOnProfile: Bool = false,
-        nativeUniqueGiftData: Data? = nil
+        displayedOnProfile: Bool = false
     ) {
         self.id = id
         self.telegramGiftId = telegramGiftId
+        self.telegramGiftPayload = telegramGiftPayload
         self.slug = slug
         self.title = title
         self.number = number
@@ -147,7 +151,6 @@ public struct DemoGift: Codable, Equatable, Identifiable {
         self.senderProfileId = senderProfileId
         self.receivedAt = receivedAt
         self.displayedOnProfile = displayedOnProfile
-        self.nativeUniqueGiftData = nativeUniqueGiftData
     }
 }
 
@@ -474,6 +477,8 @@ public struct DemoStudioDocument: Codable, Equatable {
     public var starsBalance: Int64
     public var starsTransactions: [DemoStarsTransaction]
     public var ownerProfile: DemoOwnerProfileOverride
+    /// Optional keeps documents written by earlier builds decodable.
+    public var watermarkVisible: Bool?
 
     public init(
         schemaVersion: Int = 3,
@@ -481,7 +486,8 @@ public struct DemoStudioDocument: Codable, Equatable {
         chats: [DemoChat] = [],
         starsBalance: Int64 = 0,
         starsTransactions: [DemoStarsTransaction] = [],
-        ownerProfile: DemoOwnerProfileOverride = DemoOwnerProfileOverride()
+        ownerProfile: DemoOwnerProfileOverride = DemoOwnerProfileOverride(),
+        watermarkVisible: Bool? = true
     ) {
         self.schemaVersion = schemaVersion
         self.profiles = profiles
@@ -489,5 +495,10 @@ public struct DemoStudioDocument: Codable, Equatable {
         self.starsBalance = max(0, starsBalance)
         self.starsTransactions = starsTransactions
         self.ownerProfile = ownerProfile
+        self.watermarkVisible = watermarkVisible
+    }
+
+    public var isWatermarkVisible: Bool {
+        return self.watermarkVisible ?? true
     }
 }

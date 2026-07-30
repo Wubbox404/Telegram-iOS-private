@@ -6,6 +6,43 @@ import TelegramPresentationData
 import AccountContext
 import DemoStudioCore
 
+enum DemoStudioAvatarPipeline {
+    static func normalizedSquareImage(_ image: UIImage, side: CGFloat = 640.0) -> UIImage {
+        let sourceSize = image.size
+        guard sourceSize.width > 0.0, sourceSize.height > 0.0 else {
+            return image
+        }
+        let cropSide = min(sourceSize.width, sourceSize.height)
+        let cropRect = CGRect(
+            x: floor((sourceSize.width - cropSide) * 0.5),
+            y: floor((sourceSize.height - cropSide) * 0.5),
+            width: cropSide,
+            height: cropSide
+        )
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1.0
+        format.opaque = true
+        return UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: format
+        ).image { _ in
+            UIColor.black.setFill()
+            UIRectFill(CGRect(x: 0.0, y: 0.0, width: side, height: side))
+            let scale = side / cropSide
+            image.draw(in: CGRect(
+                x: -cropRect.minX * scale,
+                y: -cropRect.minY * scale,
+                width: sourceSize.width * scale,
+                height: sourceSize.height * scale
+            ))
+        }
+    }
+
+    static func jpegData(from image: UIImage, side: CGFloat = 640.0) -> Data? {
+        return self.normalizedSquareImage(image, side: side).jpegData(compressionQuality: 0.86)
+    }
+}
+
 class DemoStudioTableController: ViewController, UITableViewDataSource, UITableViewDelegate {
     let context: AccountContext
     let tableView: UITableView

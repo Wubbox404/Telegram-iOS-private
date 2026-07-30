@@ -164,10 +164,7 @@ func chatHistoryViewForLocation(
                     if preloaded {
                         return .HistoryView(view: view, type: .Generic(type: updateType), scrollPosition: nil, flashIndicators: false, originalScrollPosition: nil, initialData: combinedInitialData, id: location.id)
                     } else {
-                        if !isDemoStudioPeer && (
-                            view.isLoading
-                                || (view.entries.isEmpty && (view.holeEarlier || view.holeLater))
-                        ) {
+                        if !isDemoStudioPeer && (view.isLoading || (view.entries.isEmpty && (view.holeEarlier || view.holeLater))) {
                             return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                         }
                         var scrollPosition: ChatHistoryViewScrollPosition?
@@ -208,16 +205,16 @@ func chatHistoryViewForLocation(
                                 
                                 let maxIndex = targetIndex + 40
                                 let minIndex = targetIndex - 40
-                                if minIndex <= 0 && view.holeEarlier {
+                                if !isDemoStudioPeer && minIndex <= 0 && view.holeEarlier {
                                     fadeIn = true
                                     return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                                 }
                                 if maxIndex >= view.entries.count {
-                                    if view.holeLater {
+                                    if !isDemoStudioPeer && view.holeLater {
                                         fadeIn = true
                                         return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                                     }
-                                    if view.holeEarlier {
+                                    if !isDemoStudioPeer && view.holeEarlier {
                                         var incomingCount: Int32 = 0
                                         inner: for entry in view.entries.reversed() {
                                             if !entry.message.flags.intersection(.IsIncomingMask).isEmpty {
@@ -236,12 +233,12 @@ func chatHistoryViewForLocation(
                             scrollPosition = .positionRestoration(index: historyScrollState.messageIndex, relativeOffset: CGFloat(historyScrollState.relativeOffset))
                         } else {
                             if let _ = chatLocation.peerId, !effectiveIsAddedToChatList {
-                                if view.holeEarlier && view.entries.count <= 2 {
+                                if !isDemoStudioPeer && view.holeEarlier && view.entries.count <= 2 {
                                     fadeIn = true
                                     return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                                 }
                             }
-                            if view.entries.isEmpty && (view.holeEarlier || view.holeLater) {
+                            if !isDemoStudioPeer && view.entries.isEmpty && (view.holeEarlier || view.holeLater) {
                                 fadeIn = true
                                 return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                             }
@@ -281,14 +278,14 @@ func chatHistoryViewForLocation(
                             }
                         }
                         
-                        if !isDemoStudioPeer && !view.entries.isEmpty {
+                        if !view.entries.isEmpty {
                             let minIndex = max(0, targetIndex - count / 2)
                             let maxIndex = min(view.entries.count, targetIndex + count / 2)
-                            if minIndex == 0 && view.holeEarlier {
+                            if !isDemoStudioPeer && minIndex == 0 && view.holeEarlier {
                                 fadeIn = true
                                 return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                             }
-                            if maxIndex == view.entries.count && view.holeLater {
+                            if !isDemoStudioPeer && maxIndex == view.entries.count && view.holeLater {
                                 fadeIn = true
                                 return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                             }
@@ -325,16 +322,13 @@ func chatHistoryViewForLocation(
                 let directionHint: ListViewScrollToItemDirectionHint = sourceIndex > subject.index ? .Down : .Up
                 let chatScrollPosition = ChatHistoryViewScrollPosition.index(subject: subject, position: scrollPosition, directionHint: directionHint, animated: animated, highlight: highlight, displayLink: false, setupReply: setupReply)
                 var first = true
-                return account.viewTracker.aroundMessageHistoryViewForLocation(context.chatLocationInput(for: chatLocation, contextHolder: chatLocationContextHolder), ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, index: subject.index, anchorIndex: anchorIndex, count: 128, ignoreRelatedChats: ignoreRelatedChats, fixedCombinedReadStates: fixedCombinedReadStates, tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, orderStatistics: orderStatistics, additionalData: additionalData, useRootInterfaceStateForThread: useRootInterfaceStateForThread)
+                return account.viewTracker.aroundMessageHistoryViewForLocation(context.chatLocationInput(for: chatLocation, contextHolder: chatLocationContextHolder), ignoreMessagesInTimestampRange: ignoreMessagesInTimestampRange, ignoreMessageIds: ignoreMessageIds, index: subject.index, anchorIndex: anchorIndex, count: 128, trackHoles: trackHoles, ignoreRelatedChats: ignoreRelatedChats, fixedCombinedReadStates: fixedCombinedReadStates, tag: tag, appendMessagesFromTheSameGroup: appendMessagesFromTheSameGroup, orderStatistics: orderStatistics, additionalData: additionalData, useRootInterfaceStateForThread: useRootInterfaceStateForThread)
                 |> map { view, updateType, initialData -> ChatHistoryViewUpdate in
                     let (cachedData, cachedDataMessages, readStateData, _) = extractAdditionalData(view: view, chatLocation: chatLocation)
                     
                     let combinedInitialData = ChatHistoryCombinedInitialData(initialData: initialData, buttonKeyboardMessage: view.topTaggedMessages.first, cachedData: cachedData, cachedDataMessages: cachedDataMessages, readStateData: readStateData)
                     
-                    if !isDemoStudioPeer && (
-                        view.isLoading
-                            || (view.entries.isEmpty && (view.holeEarlier || view.holeLater))
-                    ) {
+                    if !isDemoStudioPeer && (view.isLoading || (view.entries.isEmpty && (view.holeEarlier || view.holeLater))) {
                         return ChatHistoryViewUpdate.Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                     }
                     

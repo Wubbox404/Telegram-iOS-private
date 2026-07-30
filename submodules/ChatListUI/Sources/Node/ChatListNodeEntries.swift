@@ -4,7 +4,6 @@ import TelegramCore
 import TelegramPresentationData
 import MergeLists
 import AccountContext
-import DemoStudioCore
 
 enum ChatListNodeEntryId: Hashable {
     case Header
@@ -18,7 +17,6 @@ enum ChatListNodeEntryId: Hashable {
     case SectionHeader
     case Notice
     case additionalCategory(Int)
-    case DemoChat(UUID)
     case TopPeer(EnginePeer.Id)
 }
 
@@ -427,7 +425,6 @@ enum ChatListNodeEntry: Comparable, Identifiable {
     case EmptyIntro(presentationData: ChatListPresentationData)
     case SectionHeader(presentationData: ChatListPresentationData, displayHide: Bool)
     case AdditionalCategory(index: Int, id: Int, title: String, image: UIImage?, appearance: ChatListNodeAdditionalCategory.Appearance, selected: Bool, presentationData: ChatListPresentationData)
-    case DemoChat(index: Int, chat: DemoChat, profile: DemoProfile, presentationData: ChatListPresentationData)
     case TopPeer(index: Int, peer: EnginePeer)
     
     var sortIndex: ChatListNodeEntrySortIndex {
@@ -449,8 +446,6 @@ enum ChatListNodeEntry: Comparable, Identifiable {
         case .SectionHeader:
             return .sectionHeader
         case let .AdditionalCategory(index, _, _, _, _, _, _):
-            return .additionalCategory(index)
-        case let .DemoChat(index, _, _, _):
             return .additionalCategory(index)
         case let .TopPeer(index, _):
             return .topPeer(index)
@@ -482,8 +477,6 @@ enum ChatListNodeEntry: Comparable, Identifiable {
             return .SectionHeader
         case let .AdditionalCategory(_, id, _, _, _, _, _):
             return .additionalCategory(id)
-        case let .DemoChat(_, chat, _, _):
-            return .DemoChat(chat.id)
         case let .TopPeer(_, peer):
             return .TopPeer(peer.id)
         }
@@ -580,15 +573,6 @@ enum ChatListNodeEntry: Comparable, Identifiable {
                         return false
                     }
                     return true
-                } else {
-                    return false
-                }
-            case let .DemoChat(lhsIndex, lhsChat, lhsProfile, lhsPresentationData):
-                if case let .DemoChat(rhsIndex, rhsChat, rhsProfile, rhsPresentationData) = rhs {
-                    return lhsIndex == rhsIndex
-                        && lhsChat == rhsChat
-                        && lhsProfile == rhsProfile
-                        && lhsPresentationData === rhsPresentationData
                 } else {
                     return false
                 }

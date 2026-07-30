@@ -1515,8 +1515,29 @@ private final class GiftViewSheetContent: CombinedComponent {
             controller.present(tooltipController, in: .current)
         }
 
+        func demoStudioGift(_ gift: StarGift) -> DemoGift {
+            switch gift {
+            case let .generic(value):
+                return DemoGift(
+                    telegramGiftId: value.id,
+                    telegramGiftPayload: try? JSONEncoder().encode(gift),
+                    title: value.title ?? "Telegram Gift",
+                    displayedOnProfile: false
+                )
+            case let .unique(value):
+                return DemoGift(
+                    telegramGiftId: value.giftId,
+                    telegramGiftPayload: try? JSONEncoder().encode(gift),
+                    slug: value.slug,
+                    title: value.title,
+                    number: Int64(value.number),
+                    displayedOnProfile: false
+                )
+            }
+        }
+
         func addGiftToDemoStudio(
-            _ gift: StarGift.UniqueGift,
+            _ gift: StarGift,
             controller: GiftViewScreen
         ) {
             let store = DemoStudioStore.shared
@@ -1524,7 +1545,7 @@ private final class GiftViewSheetContent: CombinedComponent {
             guard !profiles.isEmpty else {
                 let alert = UIAlertController(
                     title: "Demo Studio",
-                    message: "Сначала создайте профиль собеседника в Настройки → Demo Studio.",
+                    message: "Сначала создайте локальный профиль собеседника в Настройки → Demo Studio.",
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -1534,20 +1555,13 @@ private final class GiftViewSheetContent: CombinedComponent {
 
             let sheet = UIAlertController(
                 title: "Кто подарил этот подарок?",
-                message: nil,
+                message: "Запись появится только локально.",
                 preferredStyle: .actionSheet
             )
             for profile in profiles {
                 sheet.addAction(UIAlertAction(title: profile.displayName, style: .default, handler: { _ in
-                    let demoGift = DemoGift(
-                        telegramGiftId: gift.giftId,
-                        slug: gift.slug,
-                        title: gift.title,
-                        number: Int64(gift.number),
-                        senderProfileId: profile.id,
-                        displayedOnProfile: false,
-                        nativeUniqueGiftData: try? JSONEncoder().encode(gift)
-                    )
+                    var demoGift = self.demoStudioGift(gift)
+                    demoGift.senderProfileId = profile.id
                     store.update { document in
                         document.ownerProfile.gifts.append(demoGift)
                         let chatIndex: Int
@@ -1568,7 +1582,7 @@ private final class GiftViewSheetContent: CombinedComponent {
 
                     let confirmation = UIAlertController(
                         title: "Добавлено",
-                        message: "\(profile.displayName) подарил(а) «\(gift.title)».",
+                        message: "\(profile.displayName) подарил(а) «\(demoGift.title)».",
                         preferredStyle: .alert
                     )
                     confirmation.addAction(UIAlertAction(title: "OK", style: .default))
@@ -1587,20 +1601,17 @@ private final class GiftViewSheetContent: CombinedComponent {
         }
 
         func addGiftDirectlyToDemoProfile(
-            _ gift: StarGift.UniqueGift,
+            _ gift: StarGift,
             controller: GiftViewScreen
         ) {
-            let demoGift = DemoGift(
-                telegramGiftId: gift.giftId,
-                slug: gift.slug,
-                title: gift.title,
-                number: Int64(gift.number),
-                displayedOnProfile: false,
-                nativeUniqueGiftData: try? JSONEncoder().encode(gift)
-            )
+            let demoGift = self.demoStudioGift(gift)
             DemoStudioStore.shared.update { document in
                 if let index = document.ownerProfile.gifts.firstIndex(where: {
-                    $0.slug == gift.slug
+                    if let slug = demoGift.slug {
+                        return $0.slug == slug
+                    } else {
+                        return $0.telegramGiftId == demoGift.telegramGiftId
+                    }
                 }) {
                     document.ownerProfile.gifts[index] = demoGift
                 } else {
@@ -1609,7 +1620,7 @@ private final class GiftViewSheetContent: CombinedComponent {
             }
             let confirmation = UIAlertController(
                 title: "Добавлено в профиль",
-                message: "Подарок «\(gift.title)» добавлен как скрытый.",
+                message: "Подарок «\(demoGift.title)» добавлен.",
                 preferredStyle: .alert
             )
             confirmation.addAction(UIAlertAction(title: "OK", style: .default))
@@ -1625,11 +1636,47 @@ private final class GiftViewSheetContent: CombinedComponent {
             }
             
             
-            guard let arguments = self.subject.arguments, case let .unique(gift) = arguments.gift else {
+            guard let arguments = self.subject.arguments else {
                 return
             }
             
             let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+
+            if case let .generic(gift) = arguments.gift {
+                let nativeGift = StarGift.generic(gift)
+                let items: [ContextMenuItem] = [
+                    .action(ContextMenuActionItem(text: "ДЕМО: Добавить в профиль", icon: { theme in
+                        return generateTintedImage(image: UIImage(systemName: "person.crop.circle.badge.plus"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak self] c, _ in
+                        c?.dismiss(completion: nil)
+                        guard let self, let controller = self.getController() as? GiftViewScreen else {
+                            return
+                        }
+                        self.addGiftDirectlyToDemoProfile(nativeGift, controller: controller)
+                    })),
+                    .action(ContextMenuActionItem(text: "ДЕМО: Подарил мне", icon: { theme in
+                        return generateTintedImage(image: UIImage(systemName: "gift.fill"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak self] c, _ in
+                        c?.dismiss(completion: nil)
+                        guard let self, let controller = self.getController() as? GiftViewScreen else {
+                            return
+                        }
+                        self.addGiftToDemoStudio(nativeGift, controller: controller)
+                    }))
+                ]
+                let contextController = makeContextController(
+                    presentationData: presentationData,
+                    source: .reference(GiftViewContextReferenceContentSource(controller: controller, sourceView: sourceView)),
+                    items: .single(ContextController.Items(content: .list(items))),
+                    gesture: nil
+                )
+                controller.presentInGlobalOverlay(contextController)
+                return
+            }
+
+            guard case let .unique(gift) = arguments.gift else {
+                return
+            }
             let link = "https://t.me/nft/\(gift.slug)"
             
             let _ = (self.context.engine.data.get(
@@ -1684,7 +1731,7 @@ private final class GiftViewSheetContent: CombinedComponent {
                     guard let controller = self?.getController() as? GiftViewScreen else {
                         return
                     }
-                    self?.addGiftDirectlyToDemoProfile(gift, controller: controller)
+                    self?.addGiftDirectlyToDemoProfile(.unique(gift), controller: controller)
                 })))
 
                 items.append(.action(ContextMenuActionItem(text: "ДЕМО: Подарил мне", icon: { theme in
@@ -1694,7 +1741,7 @@ private final class GiftViewSheetContent: CombinedComponent {
                     guard let controller = self?.getController() as? GiftViewScreen else {
                         return
                     }
-                    self?.addGiftToDemoStudio(gift, controller: controller)
+                    self?.addGiftToDemoStudio(.unique(gift), controller: controller)
                 })))
 
                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_CopyLink, icon: { theme in
@@ -5458,8 +5505,8 @@ private final class GiftViewSheetContent: CombinedComponent {
             ))
             
             var rightControlItems: [GlassControlGroupComponent.Item] = []
-            if uniqueGift != nil && !showWearPreview && !isDismantled {
-                if let _ = component.subject.arguments?.canCraftDate {
+            if component.subject.arguments?.gift != nil && !showWearPreview && !isDismantled {
+                if uniqueGift != nil, let _ = component.subject.arguments?.canCraftDate {
                     rightControlItems.append(GlassControlGroupComponent.Item(
                         id: AnyHashable("craft"),
                         content: .icon("Premium/Craft"),

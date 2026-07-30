@@ -183,6 +183,7 @@ final class DemoOwnerProfileController: DemoStudioTableController, UIImagePicker
         case 5:
             let picker = UIImagePickerController()
             picker.sourceType = .photoLibrary
+            picker.allowsEditing = true
             picker.delegate = self
             self.present(picker, animated: true)
         default:
@@ -231,7 +232,7 @@ final class DemoOwnerProfileController: DemoStudioTableController, UIImagePicker
     ) {
         picker.dismiss(animated: true)
         guard let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
-              let data = image.jpegData(compressionQuality: 0.88),
+              let data = DemoStudioAvatarPipeline.jpegData(from: image),
               let fileName = self.store.writeAsset(data: data, fileExtension: "jpg") else {
             return
         }

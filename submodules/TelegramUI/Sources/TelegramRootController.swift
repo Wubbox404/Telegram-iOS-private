@@ -89,6 +89,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     
     private var applicationInFocusDisposable: Disposable?
     private var storyUploadEventsDisposable: Disposable?
+    private var demoStudioObserver: NSObjectProtocol?
     
     override public var minimizedContainer: MinimizedContainer? {
         didSet {
@@ -107,6 +108,13 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         super.init(mode: .automaticMasterDetail, theme: NavigationControllerTheme(presentationTheme: self.presentationData.theme))
 
         activateDemoStudio(context: context)
+        self.demoStudioObserver = NotificationCenter.default.addObserver(
+            forName: demoStudioPresentationDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateDemoStudioWatermark()
+        }
         
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).startStrict(next: { [weak self] presentationData in
@@ -160,6 +168,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             self.demoStudioWatermarkView.widthAnchor.constraint(greaterThanOrEqualToConstant: 54.0),
             self.demoStudioWatermarkView.heightAnchor.constraint(equalToConstant: 22.0)
         ])
+        self.updateDemoStudioWatermark()
     }
     
     deinit {
@@ -167,6 +176,13 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.presentationDataDisposable?.dispose()
         self.applicationInFocusDisposable?.dispose()
         self.storyUploadEventsDisposable?.dispose()
+        if let demoStudioObserver = self.demoStudioObserver {
+            NotificationCenter.default.removeObserver(demoStudioObserver)
+        }
+    }
+
+    private func updateDemoStudioWatermark() {
+        self.demoStudioWatermarkView.isHidden = !demoStudioWatermarkIsVisible()
     }
     
     public func getContactsController() -> ViewController? {

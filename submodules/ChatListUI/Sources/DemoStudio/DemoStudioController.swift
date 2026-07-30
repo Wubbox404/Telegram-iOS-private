@@ -55,7 +55,11 @@ public func demoStarsBalancePresentation() -> Int64 {
 }
 
 public func demoOwnerGiftCountPresentation() -> Int {
-    return DemoStudioStore.shared.document.ownerProfile.gifts.count
+    return DemoStudioStore.shared.document.ownerProfile.gifts.filter(\.displayedOnProfile).count
+}
+
+public func demoStudioWatermarkIsVisible() -> Bool {
+    return DemoStudioStore.shared.document.isWatermarkVisible
 }
 
 final class DemoStudioController: DemoStudioTableController {
@@ -114,7 +118,7 @@ final class DemoStudioController: DemoStudioTableController {
         case .owner:
             return 1
         case .maintenance:
-            return 1
+            return 2
         }
     }
 
@@ -181,7 +185,7 @@ final class DemoStudioController: DemoStudioTableController {
                     color: .systemOrange
                 )
             } else {
-                let giftCount = document.profiles.reduce(0) { $0 + $1.gifts.count } + document.ownerProfile.gifts.count
+                let giftCount = document.ownerProfile.gifts.count
                 return self.configuredCell(
                     title: "Подарки",
                     detail: "\(giftCount)",
@@ -197,14 +201,28 @@ final class DemoStudioController: DemoStudioTableController {
                 color: .systemRed
             )
         case .maintenance:
-            let cell = self.configuredCell(
-                title: "Удалить все демо-данные",
-                symbol: "trash.fill",
-                color: .systemRed,
-                accessory: .none
-            )
-            cell.textLabel?.textColor = self.presentationData.theme.list.itemDestructiveColor
-            return cell
+            if indexPath.row == 0 {
+                let cell = self.configuredCell(
+                    title: "Показывать надпись «ДЕМО»",
+                    symbol: "eye.fill",
+                    color: .systemGray,
+                    accessory: .none
+                )
+                let toggle = UISwitch()
+                toggle.isOn = document.isWatermarkVisible
+                toggle.addTarget(self, action: #selector(self.toggleWatermark(_:)), for: .valueChanged)
+                cell.accessoryView = toggle
+                return cell
+            } else {
+                let cell = self.configuredCell(
+                    title: "Удалить все демо-данные",
+                    symbol: "trash.fill",
+                    color: .systemRed,
+                    accessory: .none
+                )
+                cell.textLabel?.textColor = self.presentationData.theme.list.itemDestructiveColor
+                return cell
+            }
         }
     }
 
@@ -231,13 +249,21 @@ final class DemoStudioController: DemoStudioTableController {
         case .owner:
             self.push(DemoOwnerProfileController(context: self.context))
         case .maintenance:
-            self.presentConfirmation(
-                title: "Удалить все демо-данные?",
-                message: "Настоящий аккаунт Telegram и его переписки не изменятся.",
-                destructiveTitle: "Удалить"
-            ) { [weak self] in
-                self?.store.reset()
+            if indexPath.row == 1 {
+                self.presentConfirmation(
+                    title: "Удалить все демо-данные?",
+                    message: "Настоящий аккаунт Telegram и его переписки не изменятся.",
+                    destructiveTitle: "Удалить"
+                ) { [weak self] in
+                    self?.store.reset()
+                }
             }
+        }
+    }
+
+    @objc private func toggleWatermark(_ sender: UISwitch) {
+        self.store.update { document in
+            document.watermarkVisible = sender.isOn
         }
     }
 }

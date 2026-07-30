@@ -156,20 +156,12 @@ final class DemoProfilesController: DemoStudioTableController {
 
         self.cloneDisposable.set((
             self.context.engine.peers.resolvePeerByName(name: username, referrer: nil)
-            |> filter { result in
-                if case .result = result {
-                    return true
-                } else {
-                    return false
-                }
-            }
-            |> map { result -> EnginePeer? in
+            |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
                 guard case let .result(peer) = result else {
-                    return nil
+                    return .single(nil)
                 }
-                return peer
+                return .single(peer)
             }
-            |> timeout(15.0, queue: .mainQueue(), alternate: .single(nil))
             |> take(1)
             |> deliverOnMainQueue
         ).startStrict(next: { [weak self, weak progress] peer in
@@ -189,8 +181,24 @@ final class DemoProfilesController: DemoStudioTableController {
                 sourceUsername: username
             )
 
-            let cachedDataSignal = self.context.engine.data.get(
-                TelegramEngine.EngineData.Item.Peer.CachedData(id: peer.id)
+            self.context.account.viewTracker.forceUpdateCachedPeerData(peerId: peer.id)
+            let refreshDelay = self.context.account.postbox.transaction { _ -> Void in
+            }
+            let cachedDataSignal = refreshDelay
+            // Give forceUpdateCachedPeerData time to persist getFullUser,
+            // then read one coherent cached-data snapshot.
+            |> delay(2.0, queue: .mainQueue())
+            |> mapToSignal { _ in
+                return self.context.engine.data.get(
+                    TelegramEngine.EngineData.Item.Peer.CachedData(id: peer.id)
+                )
+            }
+            |> timeout(
+                10.0,
+                queue: .mainQueue(),
+                alternate: self.context.engine.data.get(
+                    TelegramEngine.EngineData.Item.Peer.CachedData(id: peer.id)
+                )
             )
             |> take(1)
             |> deliverOnMainQueue
@@ -207,7 +215,6 @@ final class DemoProfilesController: DemoStudioTableController {
                     fullSize: true
                 )
                 |> filter { $0 != nil }
-                |> then(.single(nil))
                 avatarSignal = source
                 |> timeout(10.0, queue: .mainQueue(), alternate: .single(nil))
                 |> take(1)
@@ -234,6 +241,7 @@ final class DemoProfilesController: DemoStudioTableController {
                     case let .generic(gift):
                         return DemoGift(
                             telegramGiftId: gift.id,
+                            telegramGiftPayload: try? JSONEncoder().encode(item.gift),
                             title: gift.title ?? "Telegram Gift",
                             number: item.number.map { Int64($0) },
                             receivedAt: Date(timeIntervalSince1970: TimeInterval(item.date)),
@@ -242,12 +250,12 @@ final class DemoProfilesController: DemoStudioTableController {
                     case let .unique(gift):
                         return DemoGift(
                             telegramGiftId: gift.giftId,
+                            telegramGiftPayload: try? JSONEncoder().encode(item.gift),
                             slug: gift.slug,
                             title: gift.title,
                             number: Int64(gift.number),
                             receivedAt: Date(timeIntervalSince1970: TimeInterval(item.date)),
-                            displayedOnProfile: item.savedToProfile,
-                            nativeUniqueGiftData: try? JSONEncoder().encode(gift)
+                            displayedOnProfile: item.savedToProfile
                         )
                     }
                 }
@@ -282,7 +290,7 @@ final class DemoProfilesController: DemoStudioTableController {
                     }
                 }
                 if let avatarImage,
-                   let data = avatarImage.jpegData(compressionQuality: 0.90) {
+                   let data = DemoStudioAvatarPipeline.jpegData(from: avatarImage) {
                     profile.avatarFileName = self.store.writeAsset(
                         data: data,
                         fileExtension: "jpg",

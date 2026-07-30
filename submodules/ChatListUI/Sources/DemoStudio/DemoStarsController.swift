@@ -246,6 +246,7 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
             self?.iconTransactionId = transaction.id
             let picker = UIImagePickerController()
             picker.sourceType = .photoLibrary
+            picker.allowsEditing = true
             picker.delegate = self
             self?.present(picker, animated: true)
         }))
@@ -322,7 +323,7 @@ final class DemoStarsController: DemoStudioTableController, UIImagePickerControl
         picker.dismiss(animated: true)
         guard let transactionId = self.iconTransactionId,
               let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
-              let data = image.jpegData(compressionQuality: 0.86),
+              let data = DemoStudioAvatarPipeline.jpegData(from: image, side: 256.0),
               let fileName = self.store.writeAsset(data: data, fileExtension: "jpg") else {
             self.iconTransactionId = nil
             return

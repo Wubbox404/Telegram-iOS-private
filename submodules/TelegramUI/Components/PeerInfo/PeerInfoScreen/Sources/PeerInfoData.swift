@@ -736,6 +736,12 @@ private func peerInfoScreenInputData(context: AccountContext, peerId: EnginePeer
 }
 
 public func keepPeerInfoScreenDataHot(context: AccountContext, peerId: PeerId, chatLocation: ChatLocation, chatLocationContextHolder: Atomic<ChatLocationContextHolder?>) -> Signal<Never, NoError> {
+    // Demo Studio peers are complete local Postbox records. Starting the
+    // regular profile/story/photo fetchers for them can never succeed and
+    // keeps retrying network work while their profile screen is open.
+    if Namespaces.Peer.isDemoStudioUser(peerId) {
+        return .complete()
+    }
     return peerInfoScreenInputData(context: context, peerId: peerId, isSettings: false)
     |> mapToSignal { inputData -> Signal<Never, NoError> in
         switch inputData {

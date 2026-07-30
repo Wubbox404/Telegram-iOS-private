@@ -231,7 +231,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         self.demoOwnerAvatarView.contentMode = .scaleAspectFill
         self.demoOwnerAvatarView.clipsToBounds = true
         self.demoOwnerAvatarView.isUserInteractionEnabled = false
-        self.demoOwnerAvatarView.translatesAutoresizingMaskIntoConstraints = false
+        self.demoOwnerAvatarView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         
         self.titleNodeContainer = ASDisplayNode()
         self.titleNodeRawContainer = ASDisplayNode()
@@ -324,12 +324,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         self.regularContentNode.addSubnode(self.avatarClippingNode)
         self.avatarClippingNode.addSubnode(self.avatarListNode)
         self.avatarListNode.avatarContainerNode.view.addSubview(self.demoOwnerAvatarView)
-        NSLayoutConstraint.activate([
-            self.demoOwnerAvatarView.leadingAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.leadingAnchor),
-            self.demoOwnerAvatarView.trailingAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.trailingAnchor),
-            self.demoOwnerAvatarView.topAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.topAnchor),
-            self.demoOwnerAvatarView.bottomAnchor.constraint(equalTo: self.avatarListNode.avatarContainerNode.view.bottomAnchor)
-        ])
+        self.demoOwnerAvatarView.frame = self.avatarListNode.avatarContainerNode.view.bounds
         
         self.regularContentNode.addSubnode(self.avatarListNode.listContainerNode.controlsClippingOffsetNode)
         self.regularContentNode.addSubnode(self.titleNodeContainer)
@@ -1857,6 +1852,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         }
         
         self.avatarListNode.update(size: CGSize(), avatarSize: avatarSize, isExpanded: self.isAvatarExpanded, peer: peer, isForum: isForum, threadId: self.forumTopicThreadId, threadInfo: threadData?.info, theme: presentationData.theme, transition: transition)
+        self.demoOwnerAvatarView.frame = self.avatarListNode.avatarContainerNode.view.bounds
         if (self.isSettings || self.isMyProfile), let avatarPath = demoOwnerProfilePresentation()?.avatarPath, let image = UIImage(contentsOfFile: avatarPath) {
             self.demoOwnerAvatarView.image = image
             self.demoOwnerAvatarView.isHidden = false
