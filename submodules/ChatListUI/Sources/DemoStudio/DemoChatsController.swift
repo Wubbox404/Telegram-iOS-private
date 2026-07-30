@@ -126,7 +126,7 @@ final class DemoChatsController: DemoStudioTableController {
             style: .normal,
             title: chat.isPinned ? "Открепить" : "Закрепить"
         ) { [weak self] _, _, completion in
-            self?.store.updateChat(id: chat.id) { value in
+            self?.store.updateChat(id: chat.id, bumpActivity: false) { value in
                 value.isPinned.toggle()
             }
             completion(true)
@@ -150,14 +150,14 @@ final class DemoChatsController: DemoStudioTableController {
         }
         let chat = chats[indexPath.row].0
         let mute = UIContextualAction(style: .normal, title: chat.isMuted ? "Со звуком" : "Без звука") { [weak self] _, _, completion in
-            self?.store.updateChat(id: chat.id) { value in
+            self?.store.updateChat(id: chat.id, bumpActivity: false) { value in
                 value.isMuted.toggle()
             }
             completion(true)
         }
         mute.backgroundColor = .systemPurple
         let archive = UIContextualAction(style: .normal, title: chat.isArchived ? "Вернуть" : "Архив") { [weak self] _, _, completion in
-            self?.store.updateChat(id: chat.id) { value in
+            self?.store.updateChat(id: chat.id, bumpActivity: false) { value in
                 value.isArchived.toggle()
             }
             completion(true)

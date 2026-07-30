@@ -124,6 +124,7 @@ public struct DemoGift: Codable, Equatable, Identifiable {
     public var senderProfileId: UUID?
     public var receivedAt: Date
     public var displayedOnProfile: Bool
+    public var nativeUniqueGiftData: Data?
 
     public init(
         id: UUID = UUID(),
@@ -134,7 +135,8 @@ public struct DemoGift: Codable, Equatable, Identifiable {
         imageFileName: String? = nil,
         senderProfileId: UUID? = nil,
         receivedAt: Date = Date(),
-        displayedOnProfile: Bool = false
+        displayedOnProfile: Bool = false,
+        nativeUniqueGiftData: Data? = nil
     ) {
         self.id = id
         self.telegramGiftId = telegramGiftId
@@ -145,6 +147,7 @@ public struct DemoGift: Codable, Equatable, Identifiable {
         self.senderProfileId = senderProfileId
         self.receivedAt = receivedAt
         self.displayedOnProfile = displayedOnProfile
+        self.nativeUniqueGiftData = nativeUniqueGiftData
     }
 }
 

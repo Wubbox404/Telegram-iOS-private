@@ -164,7 +164,10 @@ func chatHistoryViewForLocation(
                     if preloaded {
                         return .HistoryView(view: view, type: .Generic(type: updateType), scrollPosition: nil, flashIndicators: false, originalScrollPosition: nil, initialData: combinedInitialData, id: location.id)
                     } else {
-                        if view.isLoading || (view.entries.isEmpty && (view.holeEarlier || view.holeLater)) {
+                        if !isDemoStudioPeer && (
+                            view.isLoading
+                                || (view.entries.isEmpty && (view.holeEarlier || view.holeLater))
+                        ) {
                             return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                         }
                         var scrollPosition: ChatHistoryViewScrollPosition?
@@ -278,7 +281,7 @@ func chatHistoryViewForLocation(
                             }
                         }
                         
-                        if !view.entries.isEmpty {
+                        if !isDemoStudioPeer && !view.entries.isEmpty {
                             let minIndex = max(0, targetIndex - count / 2)
                             let maxIndex = min(view.entries.count, targetIndex + count / 2)
                             if minIndex == 0 && view.holeEarlier {
@@ -289,7 +292,7 @@ func chatHistoryViewForLocation(
                                 fadeIn = true
                                 return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                             }
-                        } else if view.holeEarlier || view.holeLater {
+                        } else if !isDemoStudioPeer && (view.holeEarlier || view.holeLater) {
                             fadeIn = true
                             return .Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                         }
@@ -328,7 +331,10 @@ func chatHistoryViewForLocation(
                     
                     let combinedInitialData = ChatHistoryCombinedInitialData(initialData: initialData, buttonKeyboardMessage: view.topTaggedMessages.first, cachedData: cachedData, cachedDataMessages: cachedDataMessages, readStateData: readStateData)
                     
-                    if view.isLoading || (view.entries.isEmpty && (view.holeEarlier || view.holeLater)) {
+                    if !isDemoStudioPeer && (
+                        view.isLoading
+                            || (view.entries.isEmpty && (view.holeEarlier || view.holeLater))
+                    ) {
                         return ChatHistoryViewUpdate.Loading(initialData: combinedInitialData, type: .Generic(type: updateType))
                     }
                     

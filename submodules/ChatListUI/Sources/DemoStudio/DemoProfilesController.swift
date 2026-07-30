@@ -156,12 +156,20 @@ final class DemoProfilesController: DemoStudioTableController {
 
         self.cloneDisposable.set((
             self.context.engine.peers.resolvePeerByName(name: username, referrer: nil)
-            |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
-                guard case let .result(peer) = result else {
-                    return .single(nil)
+            |> filter { result in
+                if case .result = result {
+                    return true
+                } else {
+                    return false
                 }
-                return .single(peer)
             }
+            |> map { result -> EnginePeer? in
+                guard case let .result(peer) = result else {
+                    return nil
+                }
+                return peer
+            }
+            |> timeout(15.0, queue: .mainQueue(), alternate: .single(nil))
             |> take(1)
             |> deliverOnMainQueue
         ).startStrict(next: { [weak self, weak progress] peer in
@@ -238,7 +246,8 @@ final class DemoProfilesController: DemoStudioTableController {
                             title: gift.title,
                             number: Int64(gift.number),
                             receivedAt: Date(timeIntervalSince1970: TimeInterval(item.date)),
-                            displayedOnProfile: item.savedToProfile
+                            displayedOnProfile: item.savedToProfile,
+                            nativeUniqueGiftData: try? JSONEncoder().encode(gift)
                         )
                     }
                 }

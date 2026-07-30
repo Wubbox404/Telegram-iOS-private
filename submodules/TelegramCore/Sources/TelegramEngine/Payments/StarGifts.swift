@@ -1880,7 +1880,11 @@ public func updateLocalProfileGifts(
 ) {
     let value = localProfileGiftsValue.modify { current in
         var current = current
-        current[peerId] = gifts
+        if gifts.isEmpty {
+            current.removeValue(forKey: peerId)
+        } else {
+            current[peerId] = gifts
+        }
         return current
     }
     localProfileGiftsPromise.set(value)

@@ -55,7 +55,7 @@ public func demoStarsBalancePresentation() -> Int64 {
 }
 
 public func demoOwnerGiftCountPresentation() -> Int {
-    return DemoStudioStore.shared.document.ownerProfile.gifts.filter(\.displayedOnProfile).count
+    return DemoStudioStore.shared.document.ownerProfile.gifts.count
 }
 
 final class DemoStudioController: DemoStudioTableController {

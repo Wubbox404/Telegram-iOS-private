@@ -55,7 +55,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         let draft = self.pendingDraft
-        self.store.updateChat(id: self.chatId) { chat in
+        self.store.updateChat(id: self.chatId, bumpActivity: false) { chat in
             chat.draft = draft
         }
     }
@@ -423,7 +423,7 @@ final class DemoChatController: ViewController, UIImagePickerControllerDelegate,
             self.pendingMediaKind = nil
         }
         guard let author = self.pendingMediaAuthor,
-              let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage,
+              let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage),
               let data = image.jpegData(compressionQuality: 0.88),
               let fileName = self.store.writeAsset(
                 data: data,

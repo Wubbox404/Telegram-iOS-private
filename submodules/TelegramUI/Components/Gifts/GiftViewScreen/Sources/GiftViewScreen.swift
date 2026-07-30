@@ -1524,7 +1524,7 @@ private final class GiftViewSheetContent: CombinedComponent {
             guard !profiles.isEmpty else {
                 let alert = UIAlertController(
                     title: "Demo Studio",
-                    message: "Сначала создайте локальный профиль собеседника в Настройки → Demo Studio.",
+                    message: "Сначала создайте профиль собеседника в Настройки → Demo Studio.",
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -1534,7 +1534,7 @@ private final class GiftViewSheetContent: CombinedComponent {
 
             let sheet = UIAlertController(
                 title: "Кто подарил этот подарок?",
-                message: "Запись появится только локально.",
+                message: nil,
                 preferredStyle: .actionSheet
             )
             for profile in profiles {
@@ -1545,7 +1545,8 @@ private final class GiftViewSheetContent: CombinedComponent {
                         title: gift.title,
                         number: Int64(gift.number),
                         senderProfileId: profile.id,
-                        displayedOnProfile: true
+                        displayedOnProfile: false,
+                        nativeUniqueGiftData: try? JSONEncoder().encode(gift)
                     )
                     store.update { document in
                         document.ownerProfile.gifts.append(demoGift)
@@ -1594,7 +1595,8 @@ private final class GiftViewSheetContent: CombinedComponent {
                 slug: gift.slug,
                 title: gift.title,
                 number: Int64(gift.number),
-                displayedOnProfile: true
+                displayedOnProfile: false,
+                nativeUniqueGiftData: try? JSONEncoder().encode(gift)
             )
             DemoStudioStore.shared.update { document in
                 if let index = document.ownerProfile.gifts.firstIndex(where: {
@@ -1607,7 +1609,7 @@ private final class GiftViewSheetContent: CombinedComponent {
             }
             let confirmation = UIAlertController(
                 title: "Добавлено в профиль",
-                message: "Подарок «\(gift.title)» виден только в Demo Studio.",
+                message: "Подарок «\(gift.title)» добавлен как скрытый.",
                 preferredStyle: .alert
             )
             confirmation.addAction(UIAlertAction(title: "OK", style: .default))

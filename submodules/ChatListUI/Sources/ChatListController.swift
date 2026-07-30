@@ -734,12 +734,6 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             })
         }
         
-        if enableDebugActions {
-            self.tabBarItemDebugTapAction = {
-                preconditionFailure("debug tap")
-            }
-        }
-        
         if case .chatList(.root) = self.location {
             self.chatListDisplayNode.mainContainerNode.currentItemFilterUpdated = { [weak self] filter, fraction, transition, force in
                 guard let strongSelf = self else {

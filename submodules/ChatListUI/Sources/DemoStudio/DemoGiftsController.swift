@@ -101,7 +101,7 @@ final class DemoGiftsController: DemoStudioTableController {
             .displayName ?? "Неизвестный пользователь"
         return self.configuredCell(
             title: gift.title,
-            subtitle: "Подарил: \(senderName)\(gift.displayedOnProfile ? " • в профиле" : "")",
+            subtitle: "Подарил: \(senderName) • скрыт",
             symbol: "gift.fill",
             color: .systemPink,
             accessory: .none
@@ -141,18 +141,6 @@ final class DemoGiftsController: DemoStudioTableController {
         }
         let gift = gifts[indexPath.row]
         let sheet = UIAlertController(title: gift.title, message: nil, preferredStyle: .actionSheet)
-        sheet.addAction(UIAlertAction(
-            title: gift.displayedOnProfile ? "Убрать из профиля" : "Показывать в профиле",
-            style: .default,
-            handler: { [weak self] _ in
-                self?.store.update { document in
-                    guard let index = document.ownerProfile.gifts.firstIndex(where: { $0.id == gift.id }) else {
-                        return
-                    }
-                    document.ownerProfile.gifts[index].displayedOnProfile.toggle()
-                }
-            }
-        ))
         sheet.addAction(UIAlertAction(title: "Изменить", style: .default, handler: { [weak self] _ in
             self?.editGift(gift)
         }))
@@ -203,7 +191,7 @@ final class DemoGiftsController: DemoStudioTableController {
                         slug: slug.isEmpty ? nil : slug,
                         title: title.isEmpty ? "Telegram Gift" : title,
                         senderProfileId: profile.id,
-                        displayedOnProfile: true
+                        displayedOnProfile: false
                     ),
                     sender: profile
                 )

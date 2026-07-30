@@ -54,25 +54,25 @@ private extension DemoStarsTransaction {
             break
         }
 
-        let peer: StarsContext.State.Transaction.Peer
-        switch self.kind {
-        case .some(.purchase):
-            peer = .appStore
-        case .some(.ads):
-            peer = .ads
-        case .some(.apiExtension):
-            peer = .apiLimitExtension
-        default:
-            peer = .unsupported
-        }
-
         let photo: TelegramMediaWebFile?
+        let customPeer: EnginePeer?
         if let url = DemoStudioStore.shared.assetURL(fileName: self.iconFileName),
            let data = try? Data(contentsOf: url),
            let image = UIImage(data: data) {
             let dimensions = PixelDimensions(
                 width: Int32(clamping: Int(image.size.width * image.scale)),
                 height: Int32(clamping: Int(image.size.height * image.scale))
+            )
+            let representation = TelegramMediaImageRepresentation(
+                dimensions: dimensions,
+                resource: LocalFileReferenceMediaResource(
+                    localFilePath: url.path,
+                    randomId: self.stableMediaId
+                ),
+                progressiveSizes: [],
+                immediateThumbnailData: data,
+                hasVideo: false,
+                isPersonal: true
             )
             photo = TelegramMediaWebFile(
                 resource: LocalFileReferenceMediaResource(
@@ -83,8 +83,49 @@ private extension DemoStarsTransaction {
                 size: Int32(clamping: data.count),
                 attributes: [.ImageSize(size: dimensions)]
             )
+            customPeer = .user(TelegramUser(
+                id: EnginePeer.Id(
+                    namespace: Namespaces.Peer.Empty,
+                    id: EnginePeer.Id.Id._internalFromInt64Value(self.stableMediaId)
+                ),
+                accessHash: nil,
+                firstName: self.peerName.isEmpty ? self.title : self.peerName,
+                lastName: nil,
+                username: nil,
+                phone: nil,
+                photo: [representation],
+                botInfo: nil,
+                restrictionInfo: nil,
+                flags: [],
+                emojiStatus: nil,
+                usernames: [],
+                storiesHidden: false,
+                nameColor: nil,
+                backgroundEmojiId: nil,
+                profileColor: nil,
+                profileBackgroundEmojiId: nil,
+                subscriberCount: nil,
+                verificationIconFileId: nil
+            ))
         } else {
             photo = nil
+            customPeer = nil
+        }
+
+        let peer: StarsContext.State.Transaction.Peer
+        if let customPeer {
+            peer = .peer(customPeer)
+        } else {
+            switch self.kind {
+            case .some(.purchase):
+                peer = .appStore
+            case .some(.ads):
+                peer = .ads
+            case .some(.apiExtension):
+                peer = .apiLimitExtension
+            default:
+                peer = .unsupported
+            }
         }
 
         return StarsContext.State.Transaction(
@@ -125,7 +166,13 @@ private extension DemoStarsTransaction {
                 hash ^= UInt64(byte)
                 hash &*= 1_099_511_628_211
             }
-            return Int64(bitPattern: hash)
+            if let iconFileName = self.iconFileName {
+                for byte in iconFileName.utf8 {
+                    hash ^= UInt64(byte)
+                    hash &*= 1_099_511_628_211
+                }
+            }
+            return max(1, Int64(bitPattern: hash & 0x7fff_ffff_ffff_ffff))
         }
     }
 }

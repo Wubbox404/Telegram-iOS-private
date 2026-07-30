@@ -83,6 +83,7 @@ final class DemoStudioPostboxBridge {
 
             for peerId in transaction.chatListGetAllPeerIds() where Namespaces.Peer.isDemoStudioUser(peerId) {
                 if !intendedPeerIds.contains(peerId) {
+                    updateLocalProfileGifts(peerId: peerId, gifts: [])
                     transaction.updatePeerChatListInclusion(peerId, inclusion: .notIncluded)
                     transaction.clearHistory(
                         peerId,
@@ -115,6 +116,8 @@ final class DemoStudioPostboxBridge {
                         data = data.withUpdatedMainProfileTab(.gifts)
                     } else if profile.savedMusicTitle != nil {
                         data = data.withUpdatedMainProfileTab(.music)
+                    } else {
+                        data = data.withUpdatedMainProfileTab(nil)
                     }
                     data = data.withUpdatedSavedMusic(Self.makeSavedMusic(profile: profile))
                     return data
@@ -150,19 +153,19 @@ final class DemoStudioPostboxBridge {
                     document.ownerProfile.gifts,
                     profilePeerIds: profilePeerIds,
                     transaction: transaction,
-                    store: store
+                    store: store,
+                    forceHidden: true
                 )
             )
             if !document.ownerProfile.gifts.isEmpty {
                 transaction.updatePeerCachedData(peerIds: Set([accountPeerId]), update: { _, current in
-                    guard let data = current as? CachedUserData else {
-                        return current
-                    }
+                    var data = (current as? CachedUserData) ?? CachedUserData()
                     let visibleGiftCount = max(
                         data.starGiftsCount ?? 0,
                         Int32(clamping: document.ownerProfile.gifts.count)
                     )
-                    return data.withUpdatedStarGiftsCount(visibleGiftCount)
+                    data = data.withUpdatedStarGiftsCount(visibleGiftCount)
+                    return data.withUpdatedMainProfileTab(.gifts)
                 })
             }
 
@@ -232,7 +235,20 @@ final class DemoStudioPostboxBridge {
                     let _ = transaction.addMessages(messagesToAdd, location: .Random)
                 }
 
-                let groupId: PeerGroupId = chat.isArchived ? .group(1) : .root
+                transaction.updateCurrentPeerNotificationSettings([
+                    peerId: TelegramPeerNotificationSettings(
+                        muteState: chat.isMuted
+                            ? .muted(until: Int32.max)
+                            : .unmuted,
+                        messageSound: .default,
+                        displayPreviews: .default,
+                        storySettings: .default
+                    )
+                ])
+
+                let groupId: PeerGroupId = chat.isArchived
+                    ? Namespaces.PeerGroup.archive
+                    : .root
                 transaction.updatePeerChatListInclusion(
                     peerId,
                     inclusion: .ifHasMessagesOrOneOf(
@@ -259,10 +275,21 @@ final class DemoStudioPostboxBridge {
         }
 
         var representations: [TelegramMediaImageRepresentation] = []
-        if let data = store.assetURL(fileName: profile.avatarFileName).flatMap({ try? Data(contentsOf: $0) }) {
+        if let url = store.assetURL(fileName: profile.avatarFileName),
+           let data = try? Data(contentsOf: url),
+           let image = UIImage(data: data) {
             representations.append(TelegramMediaImageRepresentation(
-                dimensions: PixelDimensions(width: 640, height: 640),
-                resource: EmptyMediaResource(),
+                dimensions: PixelDimensions(
+                    width: Int32(clamping: Int(image.size.width * image.scale)),
+                    height: Int32(clamping: Int(image.size.height * image.scale))
+                ),
+                resource: LocalFileReferenceMediaResource(
+                    localFilePath: url.path,
+                    randomId: Self.positiveStableId(
+                        profile.id,
+                        salt: profile.avatarFileName
+                    )
+                ),
                 progressiveSizes: [],
                 immediateThumbnailData: data,
                 hasVideo: false,
@@ -350,7 +377,8 @@ final class DemoStudioPostboxBridge {
         _ gifts: [DemoGift],
         profilePeerIds: [UUID: PeerId],
         transaction: Transaction,
-        store: DemoStudioStore
+        store: DemoStudioStore,
+        forceHidden: Bool = false
     ) -> [ProfileGiftsContext.State.StarGift] {
         return gifts.map { gift in
             let fromPeer: EnginePeer?
@@ -362,70 +390,15 @@ final class DemoStudioPostboxBridge {
                 fromPeer = nil
             }
 
-            let previewData = store.assetURL(fileName: gift.imageFileName).flatMap {
-                try? Data(contentsOf: $0)
-            }
-            let previewRepresentations: [TelegramMediaImageRepresentation]
-            if let previewData {
-                previewRepresentations = [
-                    TelegramMediaImageRepresentation(
-                        dimensions: PixelDimensions(width: 512, height: 512),
-                        resource: EmptyMediaResource(),
-                        progressiveSizes: [],
-                        immediateThumbnailData: previewData,
-                        hasVideo: false,
-                        isPersonal: false
-                    )
-                ]
-            } else {
-                previewRepresentations = []
-            }
-            let file = TelegramMediaFile(
-                fileId: MediaId(
-                    namespace: Namespaces.Media.LocalFile,
-                    id: Self.positiveStableId(gift.id)
-                ),
-                partialReference: nil,
-                resource: EmptyMediaResource(),
-                previewRepresentations: previewRepresentations,
-                videoThumbnails: [],
-                immediateThumbnailData: previewData,
-                mimeType: "application/x-tgsticker",
-                size: nil,
-                attributes: [
-                    .FileName(fileName: "gift.tgs"),
-                    .Sticker(displayText: "🎁", packReference: nil, maskData: nil)
-                ],
-                alternativeRepresentations: []
-            )
-            let genericGift = StarGift.Gift(
-                id: gift.telegramGiftId ?? Self.positiveStableId(gift.id),
-                title: gift.title.isEmpty ? "Gift" : gift.title,
-                file: file,
-                price: 0,
-                convertStars: 0,
-                availability: nil,
-                soldOut: nil,
-                flags: [],
-                upgradeStars: nil,
-                releasedBy: nil,
-                perUserLimit: nil,
-                lockedUntilDate: nil,
-                auctionSlug: nil,
-                auctionGiftsPerRound: nil,
-                auctionStartDate: nil,
-                upgradeVariantsCount: nil,
-                background: nil
-            )
             return ProfileGiftsContext.State.StarGift(
-                gift: .generic(genericGift),
+                gift: Self.makeStarGift(gift, store: store),
                 reference: nil,
                 fromPeer: fromPeer,
                 date: Int32(clamping: Int64(gift.receivedAt.timeIntervalSince1970)),
                 text: nil,
                 entities: nil,
                 nameHidden: fromPeer == nil,
-                savedToProfile: gift.displayedOnProfile,
+                savedToProfile: forceHidden ? false : gift.displayedOnProfile,
                 pinnedToTop: false,
                 convertStars: nil,
                 canUpgrade: false,
@@ -443,6 +416,126 @@ final class DemoStudioPostboxBridge {
                 canCraftAt: nil
             )
         }
+    }
+
+    /// Builds the exact StarGift payload consumed by both the native profile
+    /// gifts grid and ChatMessageGiftBubbleContentNode. Keeping one payload
+    /// prevents the chat card and profile card from drifting apart.
+    private static func makeStarGift(
+        _ gift: DemoGift,
+        store: DemoStudioStore
+    ) -> StarGift {
+        if let nativeUniqueGiftData = gift.nativeUniqueGiftData,
+           let nativeGift = try? JSONDecoder().decode(
+               StarGift.UniqueGift.self,
+               from: nativeUniqueGiftData
+           ) {
+            return .unique(nativeGift)
+        }
+
+        let previewURL = store.assetURL(fileName: gift.imageFileName)
+        let previewData = previewURL.flatMap { try? Data(contentsOf: $0) }
+        let dimensions: PixelDimensions?
+        if let previewData, let image = UIImage(data: previewData) {
+            dimensions = PixelDimensions(
+                width: Int32(clamping: Int(image.size.width * image.scale)),
+                height: Int32(clamping: Int(image.size.height * image.scale))
+            )
+        } else {
+            dimensions = nil
+        }
+
+        let resource: TelegramMediaResource
+        let mimeType: String
+        let fileName: String
+        if let previewURL {
+            resource = LocalFileReferenceMediaResource(
+                localFilePath: previewURL.path,
+                randomId: Self.positiveStableId(
+                    gift.id,
+                    salt: gift.imageFileName
+                )
+            )
+            let fileExtension = previewURL.pathExtension.lowercased()
+            switch fileExtension {
+            case "jpg", "jpeg":
+                mimeType = "image/jpeg"
+            case "webp":
+                mimeType = "image/webp"
+            default:
+                mimeType = "image/png"
+            }
+            fileName = previewURL.lastPathComponent
+        } else {
+            resource = EmptyMediaResource()
+            mimeType = "application/x-tgsticker"
+            fileName = "gift.tgs"
+        }
+
+        var attributes: [TelegramMediaFileAttribute] = [
+            .FileName(fileName: fileName),
+            .Sticker(displayText: "🎁", packReference: nil, maskData: nil)
+        ]
+        if let dimensions {
+            attributes.append(.ImageSize(size: dimensions))
+        }
+
+        let previewRepresentations: [TelegramMediaImageRepresentation]
+        if let previewURL, let previewData, let dimensions {
+            previewRepresentations = [
+                TelegramMediaImageRepresentation(
+                    dimensions: dimensions,
+                    resource: LocalFileReferenceMediaResource(
+                        localFilePath: previewURL.path,
+                        randomId: Self.positiveStableId(
+                            gift.id,
+                            salt: "preview:\(gift.imageFileName ?? "")"
+                        )
+                    ),
+                    progressiveSizes: [],
+                    immediateThumbnailData: previewData,
+                    hasVideo: false,
+                    isPersonal: false
+                )
+            ]
+        } else {
+            previewRepresentations = []
+        }
+
+        let file = TelegramMediaFile(
+            fileId: MediaId(
+                namespace: Namespaces.Media.LocalFile,
+                id: Self.positiveStableId(gift.id)
+            ),
+            partialReference: nil,
+            resource: resource,
+            previewRepresentations: previewRepresentations,
+            videoThumbnails: [],
+            immediateThumbnailData: previewData,
+            mimeType: mimeType,
+            size: previewData.map { Int64($0.count) },
+            attributes: attributes,
+            alternativeRepresentations: []
+        )
+        return .generic(StarGift.Gift(
+            id: gift.telegramGiftId ?? Self.positiveStableId(gift.id),
+            title: gift.title.isEmpty ? "Telegram Gift" : gift.title,
+            file: file,
+            price: 0,
+            convertStars: 0,
+            availability: nil,
+            soldOut: nil,
+            flags: [],
+            upgradeStars: nil,
+            releasedBy: nil,
+            perUserLimit: nil,
+            lockedUntilDate: nil,
+            auctionSlug: nil,
+            auctionGiftsPerRound: nil,
+            auctionStartDate: nil,
+            upgradeVariantsCount: nil,
+            background: nil
+        ))
     }
 
     private static func makeMessage(
@@ -464,6 +557,7 @@ final class DemoStudioPostboxBridge {
         let content = Self.messageContent(
             value: value,
             peerId: peerId,
+            accountPeerId: accountPeerId,
             profile: profile,
             store: store
         )
@@ -489,6 +583,7 @@ final class DemoStudioPostboxBridge {
     private static func messageContent(
         value: DemoMessage,
         peerId: PeerId,
+        accountPeerId: PeerId,
         profile: DemoProfile,
         store: DemoStudioStore
     ) -> (text: String, media: [Media]) {
@@ -609,15 +704,78 @@ final class DemoStudioPostboxBridge {
                 stars: max(0, value.amount ?? 1),
                 broadcastMessagesAllowed: false
             ))])
-        case .starGift, .service:
-            let fallbackText: String
-            if !value.text.isEmpty {
-                fallbackText = value.text
-            } else if value.resolvedKind == .starGift, let gift = value.gift {
-                fallbackText = "🎁 \(gift.title)"
+        case .starGift:
+            let gift = value.gift ?? DemoGift(
+                id: value.id,
+                title: value.text.isEmpty ? "Telegram Gift" : value.text,
+                senderProfileId: value.author == .profile ? profile.id : nil,
+                receivedAt: value.timestamp,
+                displayedOnProfile: false
+            )
+            let note: String?
+            if value.gift != nil && !value.text.isEmpty
+                && value.text != "Подарил(а) вам подарок" {
+                note = value.text
             } else {
-                fallbackText = value.resolvedKind.title
+                note = nil
             }
+            let renderedGift = Self.makeStarGift(gift, store: store)
+            let senderId = value.author == .profile ? peerId : accountPeerId
+            let action: TelegramMediaActionType
+            switch renderedGift {
+            case .generic:
+                action = .starGift(
+                    gift: renderedGift,
+                    convertStars: nil,
+                    text: note,
+                    entities: nil,
+                    nameHidden: false,
+                    savedToProfile: gift.displayedOnProfile,
+                    converted: false,
+                    upgraded: false,
+                    canUpgrade: false,
+                    upgradeStars: nil,
+                    isRefunded: false,
+                    isPrepaidUpgrade: false,
+                    upgradeMessageId: nil,
+                    peerId: nil,
+                    senderId: senderId,
+                    savedId: nil,
+                    prepaidUpgradeHash: nil,
+                    giftMessageId: nil,
+                    upgradeSeparate: false,
+                    isAuctionAcquired: false,
+                    toPeerId: nil,
+                    number: gift.number.map { Int32(clamping: $0) }
+                )
+            case .unique:
+                action = .starGiftUnique(
+                    gift: renderedGift,
+                    isUpgrade: false,
+                    isTransferred: false,
+                    savedToProfile: gift.displayedOnProfile,
+                    canExportDate: nil,
+                    transferStars: nil,
+                    isRefunded: false,
+                    isPrepaidUpgrade: false,
+                    peerId: nil,
+                    senderId: senderId,
+                    savedId: nil,
+                    resaleAmount: nil,
+                    canTransferDate: nil,
+                    canResaleDate: nil,
+                    dropOriginalDetailsStars: nil,
+                    assigned: false,
+                    fromOffer: false,
+                    canCraftAt: nil,
+                    isCrafted: false
+                )
+            }
+            return ("", [TelegramMediaAction(action: action)])
+        case .service:
+            let fallbackText = value.text.isEmpty
+                ? value.resolvedKind.title
+                : value.text
             return ("", [TelegramMediaAction(action: .customText(
                 text: fallbackText,
                 entities: [],
@@ -627,12 +785,23 @@ final class DemoStudioPostboxBridge {
     }
 
     private static func makeImage(value: DemoMessage, store: DemoStudioStore) -> TelegramMediaImage? {
-        guard let data = store.assetURL(fileName: value.mediaFileName).flatMap({ try? Data(contentsOf: $0) }) else {
+        guard let url = store.assetURL(fileName: value.mediaFileName),
+              let data = try? Data(contentsOf: url),
+              let image = UIImage(data: data) else {
             return nil
         }
         let representation = TelegramMediaImageRepresentation(
-            dimensions: PixelDimensions(width: 1280, height: 1280),
-            resource: EmptyMediaResource(),
+            dimensions: PixelDimensions(
+                width: Int32(clamping: Int(image.size.width * image.scale)),
+                height: Int32(clamping: Int(image.size.height * image.scale))
+            ),
+            resource: LocalFileReferenceMediaResource(
+                localFilePath: url.path,
+                randomId: positiveStableId(
+                    value.id,
+                    salt: value.mediaFileName
+                )
+            ),
             progressiveSizes: [],
             immediateThumbnailData: data
         )
@@ -734,12 +903,22 @@ final class DemoStudioPostboxBridge {
     }
 
     private static func positiveStableId(_ uuid: UUID) -> Int64 {
+        return positiveStableId(uuid, salt: nil)
+    }
+
+    private static func positiveStableId(_ uuid: UUID, salt: String?) -> Int64 {
         var bytes = uuid.uuid
         return withUnsafeBytes(of: &bytes) { buffer in
             var hash: UInt64 = 14_695_981_039_346_656_037
             for byte in buffer {
                 hash ^= UInt64(byte)
                 hash &*= 1_099_511_628_211
+            }
+            if let salt {
+                for byte in salt.utf8 {
+                    hash ^= UInt64(byte)
+                    hash &*= 1_099_511_628_211
+                }
             }
             return Int64(hash & 0x007f_ffff_ffff_ffff)
         }

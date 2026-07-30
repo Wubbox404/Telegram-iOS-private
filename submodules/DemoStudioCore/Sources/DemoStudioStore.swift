@@ -51,8 +51,13 @@ public final class DemoStudioStore {
 
     public func update(_ transform: (inout DemoStudioDocument) -> Void) {
         self.lock.lock()
+        let previousDocument = self.documentValue
         transform(&self.documentValue)
         self.normalizeLocked()
+        guard self.documentValue != previousDocument else {
+            self.lock.unlock()
+            return
+        }
         self.saveLocked()
         self.lock.unlock()
 
@@ -96,13 +101,20 @@ public final class DemoStudioStore {
         return chat.id
     }
 
-    public func updateChat(id: UUID, _ transform: (inout DemoChat) -> Void) {
+    public func updateChat(
+        id: UUID,
+        bumpActivity: Bool = true,
+        _ transform: (inout DemoChat) -> Void
+    ) {
         self.update { document in
             guard let index = document.chats.firstIndex(where: { $0.id == id }) else {
                 return
             }
+            let previousChat = document.chats[index]
             transform(&document.chats[index])
-            document.chats[index].updatedAt = Date()
+            if bumpActivity && document.chats[index] != previousChat {
+                document.chats[index].updatedAt = Date()
+            }
         }
     }
 
@@ -124,7 +136,7 @@ public final class DemoStudioStore {
     }
 
     public func markChatRead(id: UUID) {
-        self.updateChat(id: id) { chat in
+        self.updateChat(id: id, bumpActivity: false) { chat in
             chat.unreadCount = 0
         }
     }
